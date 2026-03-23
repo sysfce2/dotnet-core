@@ -143,6 +143,11 @@ variables:
   - name: signDacEnabled
     value: false
 
+# opt in to node24 in pipelines agent to fix noisy warnings: https://github.com/microsoft/azure-pipelines-agent/issues/5464
+# can be removed once it is the default
+- name: AZP_AGENT_USE_NODE24_TO_START_CONTAINER
+  value: true
+
 - name: almaLinuxContainerName
   value: almaLinuxContainer
 - name: almaLinuxContainerImage
@@ -172,6 +177,11 @@ variables:
   value: ubuntuArmContainer
 - name: ubuntuArmContainerImage
   value: mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-24.04-arm64
+
+- name: azurelinuxBuildContainerName
+  value: azurelinuxBuildContainer
+- name: azurelinuxBuildContainerImage
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-build-amd64
 
 - name: azurelinuxX64CrossContainerName
   value: azurelinuxX64CrossContainer
@@ -259,9 +269,9 @@ variables:
 
 - ${{ if eq(variables['System.TeamProject'], 'public') }}:
   - name: defaultPoolName
-    value: NetCore-Public-XL
+    value: NetCore-Public-XL  # use hardcoded name since there is no servicing variant of the XL pool
   - name: shortStackPoolName
-    value: NetCore-Public
+    value: $(DncEngPublicBuildPool)
   - name: poolImage_Linux
     value: build.azurelinux.3.amd64.open
   - name: poolImage_LinuxArm64
@@ -278,9 +288,9 @@ variables:
       value: windows.vs2026.amd64.open
 - ${{ else }}:
   - name: defaultPoolName
-    value: NetCore1ESPool-Internal
+    value: $(DncEngInternalBuildPool)
   - name: shortStackPoolName
-    value: NetCore1ESPool-Internal
+    value: $(DncEngInternalBuildPool)
   - name: poolImage_Linux
     value: build.azurelinux.3.amd64
   - name: poolImage_LinuxArm64
@@ -291,4 +301,5 @@ variables:
     value: macos-latest-internal
   - name: poolImage_Windows
     value: windows.vs2026.amd64
+
 
