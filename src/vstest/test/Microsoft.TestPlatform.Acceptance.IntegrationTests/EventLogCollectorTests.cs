@@ -13,7 +13,6 @@ namespace Microsoft.TestPlatform.AcceptanceTests;
 
 [TestClass]
 [TestCategory("Windows-Review")]
-[SkipIOutOfProcessTestOnNetFrameworkCondition]
 public class EventLogCollectorTests : AcceptanceTestBase
 {
     // Fails randomly https://ci.dot.net/job/Microsoft_vstest/job/master/job/Windows_NT_Release_prtest/2084/console
@@ -93,7 +92,7 @@ public class EventLogCollectorTests : AcceptanceTestBase
             .Select(d => d.FullName)
             .ToList();
 
-        Assert.AreEqual(4, resultFiles.Count);
+        Assert.HasCount(4, resultFiles);
         StdOutputContains("Event Log.xml");
 
         var fileContent1 = File.ReadAllText(resultFiles[0]);

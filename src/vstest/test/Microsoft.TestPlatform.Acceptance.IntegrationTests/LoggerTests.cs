@@ -12,7 +12,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Microsoft.TestPlatform.AcceptanceTests;
 
 [TestClass]
-[SkipIOutOfProcessTestOnNetFrameworkCondition]
 public class LoggerTests : AcceptanceTestBase
 {
     [TestMethod]
@@ -123,7 +122,7 @@ public class LoggerTests : AcceptanceTestBase
         InvokeVsTest(arguments);
 
         var trxFilePaths = Directory.EnumerateFiles(TempDirectory.Path, trxFileNamePattern + "_net*.trx");
-        Assert.IsTrue(trxFilePaths.Count() > 1);
+        Assert.IsGreaterThan(1, trxFilePaths.Count());
     }
 
     [TestMethod]
@@ -195,7 +194,7 @@ public class LoggerTests : AcceptanceTestBase
     private static void AssertExpectedHtml(XmlElement root)
     {
         XmlNodeList elementList = root.GetElementsByTagName("details");
-        Assert.AreEqual(2, elementList.Count);
+        Assert.HasCount(2, elementList);
 
         foreach (XmlElement element in elementList)
         {
@@ -237,7 +236,7 @@ public class LoggerTests : AcceptanceTestBase
         string[] divs = ["Total tests", "Passed", "Failed", "Skipped", "Run duration", "Pass percentage", "PassingTest"];
         foreach (string str in divs)
         {
-            StringAssert.Contains(filePathContent, str);
+            Assert.Contains(str, filePathContent);
         }
     }
 

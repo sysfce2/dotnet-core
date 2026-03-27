@@ -7,8 +7,6 @@ using System.IO;
 using Microsoft.TestPlatform.TestUtilities;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.VisualStudio.TestPlatform.CoreUtilities.Extensions;
-
-using TestPlatform.TestUtilities;
 using System.Linq;
 using Microsoft.VisualStudio.TestPlatform.Common;
 using FluentAssertions;
@@ -16,7 +14,6 @@ using FluentAssertions;
 namespace Microsoft.TestPlatform.AcceptanceTests;
 
 [TestClass]
-[SkipIOutOfProcessTestOnNetFrameworkCondition]
 public class ExecutionTests : AcceptanceTestBase
 {
     //TODO: It looks like the first 3 tests would be useful to multiply by all 3 test frameworks, should we make the test even more generic, or duplicate them?
@@ -64,6 +61,21 @@ public class ExecutionTests : AcceptanceTestBase
         var assemblyPaths = BuildMultipleAssemblyPath("MSTestProject1.dll", "MSTestProject2.dll");
 
         InvokeVsTestForExecution(assemblyPaths, testAdapterPath: null, FrameworkArgValue, string.Empty);
+
+        ValidateSummaryStatus(2, 2, 2);
+        ExitCodeEquals(1); // failing tests
+    }
+
+    [TestMethod]
+    [TestCategory("Windows-Review")]
+    [TestCategory("Smoke")]
+    [NetFullTargetFrameworkDataSource(inIsolation: true, inProcess: true, useVsixRunner: true)]
+    [NetCoreTargetFrameworkDataSource]
+    public void RunMultipleMSTestAssembliesOnVstestConsoleAndTesthostCombinations3(RunnerInfo runnerInfo)
+    {
+        SetTestEnvironment(_testEnvironment, runnerInfo);
+
+        var assemblyPaths = BuildMultipleAssemblyPath("MSTestProject1.dll", "MSTestProject2.dll");
 
         InvokeVsTestForExecution(assemblyPaths, testAdapterPath: null, FrameworkArgValue, string.Empty);
 
@@ -179,7 +191,7 @@ public class ExecutionTests : AcceptanceTestBase
         InvokeVsTest(arguments);
 
         var errorMessage = "Process is terminated due to StackOverflowException.";
-        if (!runnerInfo.TargetFramework.StartsWith("net4"))
+        if (runnerInfo.IsNetTarget)
         {
             errorMessage = "Test host process crashed : Stack overflow.";
         }
@@ -209,7 +221,7 @@ public class ExecutionTests : AcceptanceTestBase
         InvokeVsTest(arguments);
 
         var errorFirstLine =
-            !runnerInfo.TargetFramework.StartsWith("net4")
+            runnerInfo.IsNetTarget
             ? "Test host standard error line: Unhandled exception. System.InvalidOperationException: Operation is not valid due to the current state of the object."
             : "Test host standard error line: Unhandled Exception: System.InvalidOperationException: Operation is not valid due to the current state of the object.";
         FileAssert.Contains(diagLogFilePath, errorFirstLine);
@@ -379,14 +391,14 @@ public class ExecutionTests : AcceptanceTestBase
         arguments = string.Concat(arguments, " /logger:\"console;prefix=true\"");
         InvokeVsTest(arguments);
 
-        StringAssert.Contains(StdOut, $"Skipping source: {nonTestDll} (.NETStandard,Version=v2.0,");
+        Assert.Contains($"Skipping source: {nonTestDll} (.NETStandard,Version=v2.0,", StdOut);
 
         ExitCodeEquals(1);
     }
 
     [TestMethod]
-    [NetFullTargetFrameworkDataSource(inIsolation: true, inProcess: true)]
-    [NetCoreTargetFrameworkDataSource]
+    // This is a built-in assembly filter test. It changes with vstest.version, so testing against 1 version of console is enough.
+    [NetCoreTargetFrameworkDataSource(useDesktopRunner: false)]
     public void RunXunitTestsWhenProvidingAllDllsInBin(RunnerInfo runnerInfo)
     {
         // This is the default filter of AzDo VSTest task:
@@ -410,8 +422,8 @@ public class ExecutionTests : AcceptanceTestBase
     }
 
     [TestMethod]
-    [NetFullTargetFrameworkDataSource(inIsolation: true, inProcess: true)]
-    [NetCoreTargetFrameworkDataSource()]
+    // This is a built-in assembly filter test. It changes with vstest.version, so testing against 1 version of console is enough.
+    [NetCoreTargetFrameworkDataSource(useDesktopRunner: false)]
     public void RunMstestTestsWhenProvidingAllDllsInBin(RunnerInfo runnerInfo)
     {
         // This is the default filter of AzDo VSTest task:
@@ -436,8 +448,8 @@ public class ExecutionTests : AcceptanceTestBase
     }
 
     [TestMethod]
-    [NetFullTargetFrameworkDataSource(inIsolation: true, inProcess: true)]
-    [NetCoreTargetFrameworkDataSource()]
+    // This is a built-in assembly filter test. It changes with vstest.version, so testing against 1 version of console is enough.
+    [NetCoreTargetFrameworkDataSource(useDesktopRunner: false)]
     public void RunNunitTestsWhenProvidingAllDllsInBin(RunnerInfo runnerInfo)
     {
         // This is the default filter of AzDo VSTest task:
