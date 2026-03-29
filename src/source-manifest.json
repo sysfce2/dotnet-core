@@ -115,10 +115,10 @@
       "commitSha": "e87544a2ca8f13d08c246c0a54db2d54960f2e48"
     },
     {
-      "barId": 308138,
+      "barId": 308225,
       "path": "templating",
       "remoteUri": "https://github.com/dotnet/templating",
-      "commitSha": "8076e343fcddd742be1cdb78242b5d19121864b5"
+      "commitSha": "a715c501bfd67e5f054445e94fba7303f9252ae8"
     },
     {
       "barId": 303332,
