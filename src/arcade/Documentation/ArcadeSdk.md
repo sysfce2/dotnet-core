@@ -596,6 +596,7 @@ Set `VSSDKTargetPlatformRegRootSuffix` property to specify the root suffix of th
 
 If `source.extension.vsixmanifest` is present next to a project file the project is by default considered to be a VSIX producing project (`IsVsixProject` property is set to true). 
 A package reference to `Microsoft.VSSDK.BuildTools` is automatically added to such project. 
+Set `IncludeMicrosoftVSSDKBuildToolsPackageReference` to `false` to opt out of the automatic package reference (e.g. if you need to manage the version yourself).
 
 Arcade SDK include build target for generating VS Template VSIXes. Adding `VSTemplate` items to project will trigger the target.
 
@@ -1096,9 +1097,6 @@ If set to `true` calls to GetResourceString receive a default resource string va
 
 #### `GenerateResxSourceOmitGetResourceString` (bool)
 If set to `true` the GetResourceString method is not included in the generated class and must be specified in a separate source file.
-
-#### `FlagNetStandard1XDependencies` (bool)
-If set to `true` the `FlagNetStandard1xDependencies` target validates that the dependency graph doesn't contain any netstandard1.x packages.
 
 <!-- Begin Generated Content: Doc Feedback -->
 <sub>Was this helpful? [![Yes](https://helix.dot.net/f/ip/5?p=Documentation%5CArcadeSdk.md)](https://helix.dot.net/f/p/5?p=Documentation%5CArcadeSdk.md) [![No](https://helix.dot.net/f/in)](https://helix.dot.net/f/n/5?p=Documentation%5CArcadeSdk.md)</sub>

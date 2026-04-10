@@ -32,7 +32,7 @@ variables:
   value: DotNetCore
 
 - name: defaultContainerOptions
-  value: --privileged
+  value: --privileged --ulimit nofile=65536:65536
 
 - ${{ if eq(parameters.desiredIBC, 'Enabled') }}:
   - name: ibcEnabled
@@ -83,8 +83,8 @@ variables:
     value: true
   - name: signType
     value: real
-  # Only sign DACs if this is an official build of a release branch and is not a source-only build.
-  - ${{ if and(eq(parameters.isOfficialBuild, true), ne(parameters.buildSourceOnly, true), or(startsWith(variables['Build.SourceBranch'], 'refs/heads/internal/release/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))) }}:
+  # Only sign DACs if this is an official build of a 1xx-band release branch and is not a source-only build.
+  - ${{ if and(eq(parameters.isOfficialBuild, true), ne(parameters.buildSourceOnly, true), or(startsWith(variables['Build.SourceBranch'], 'refs/heads/internal/release/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/')), contains(variables['Build.SourceBranch'], '.0.1')) }}:
     - name: signDacEnabled
       value: true
   - ${{ else }}:
@@ -124,8 +124,8 @@ variables:
       value: true
     - name: signType
       value: real
-    # Only sign DACs if this is not a source-only build.
-    - ${{ if ne(parameters.buildSourceOnly, true) }}:
+    # Only sign DACs if this is not a source-only build and is a 1xx-band release branch.
+    - ${{ if and(ne(parameters.buildSourceOnly, true), contains(variables['Build.SourceBranch'], '.0.1')) }}:
       - name: signDacEnabled
         value: true
     - ${{ else }}:
@@ -142,6 +142,11 @@ variables:
     value: false
   - name: signDacEnabled
     value: false
+
+# opt in to node24 in pipelines agent to fix noisy warnings: https://github.com/microsoft/azure-pipelines-agent/issues/5464
+# can be removed once it is the default
+- name: AZP_AGENT_USE_NODE24_TO_START_CONTAINER
+  value: true
 
 - name: almaLinuxContainerName
   value: almaLinuxContainer
@@ -173,55 +178,60 @@ variables:
 - name: ubuntuArmContainerImage
   value: mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-24.04-arm64
 
+- name: azurelinuxBuildContainerName
+  value: azurelinuxBuildContainer
+- name: azurelinuxBuildContainerImage
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-build-amd64
+
 - name: azurelinuxX64CrossContainerName
   value: azurelinuxX64CrossContainer
 - name: azurelinuxX64CrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-amd64
 
 - name: azurelinuxArmCrossContainerName
   value: azurelinuxArmCrossContainer
 - name: azurelinuxArmCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-arm
 
 - name: azurelinuxArm64CrossContainerName
   value: azurelinuxArm64CrossContainer
 - name: azurelinuxArm64CrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm64
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-arm64
 
 - name: azurelinuxX64MuslCrossContainerName
   value: azurelinuxX64MuslCrossContainer
 - name: azurelinuxX64MuslCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64-musl
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-amd64-musl
 
 - name: azurelinuxArmMuslCrossContainerName
   value: azurelinuxArmMuslCrossContainer
 - name: azurelinuxArmMuslCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm-musl
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-arm-musl
 
 - name: azurelinuxArm64MuslCrossContainerName
   value: azurelinuxArm64MuslCrossContainer
 - name: azurelinuxArm64MuslCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm64-musl
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-arm64-musl
 
 - name: androidCrossContainerName
   value: androidCrossContainer
 - name: androidCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-android-amd64
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-android-amd64
 
 - name: linuxBionicCrossContainerName
   value: linuxBionicCrossContainer
 - name: linuxBionicCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-android-openssl-amd64
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-android-openssl-amd64
 
 - name: browserCrossContainerName
   value: browserCrossContainer
 - name: browserCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-webassembly-amd64
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-webassembly-amd64
 
 - name: wasiCrossContainerName
   value: wasiCrossContainer
 - name: wasiCrossContainerImage
-  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-webassembly-amd64
+  value: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-webassembly-amd64
 
 - name: almaLinuxName
   value: AlmaLinux8
@@ -259,13 +269,13 @@ variables:
 
 - ${{ if eq(variables['System.TeamProject'], 'public') }}:
   - name: defaultPoolName
-    value: NetCore-Public-XL
+    value: NetCore-Public-XL  # use hardcoded name since there is no servicing variant of the XL pool
   - name: shortStackPoolName
-    value: NetCore-Public
+    value: $(DncEngPublicBuildPool)
   - name: poolImage_Linux
-    value: Azure-Linux-3-Amd64-Public
+    value: build.azurelinux.3.amd64.open
   - name: poolImage_LinuxArm64
-    value: Azure-Linux-3-Arm64-Public
+    value: build.azurelinux.3.arm64.open
   - name: poolName_LinuxArm64
     value: Docker-Linux-Arm-Public
   - name: poolImage_Mac
@@ -275,20 +285,21 @@ variables:
       value: windows.vs2026preview.scout.amd64.open
   - ${{ else }}:
     - name: poolImage_Windows
-      value: windows.vs2026preview.scout.amd64.open  # TODO: use the GA image once it's available
+      value: windows.vs2026.amd64.open
 - ${{ else }}:
   - name: defaultPoolName
-    value: NetCore1ESPool-Internal
+    value: $(DncEngInternalBuildPool)
   - name: shortStackPoolName
-    value: NetCore1ESPool-Internal
+    value: $(DncEngInternalBuildPool)
   - name: poolImage_Linux
-    value: Azure-Linux-3-Amd64
+    value: build.azurelinux.3.amd64
   - name: poolImage_LinuxArm64
-    value: Azure-Linux-3-Arm64
+    value: build.azurelinux.3.arm64
   - name: poolName_LinuxArm64
     value: Docker-Linux-Arm-Internal
   - name: poolImage_Mac
     value: macos-latest-internal
   - name: poolImage_Windows
-    value: windows.vs2026preview.scout.amd64   # TODO: use the GA image once it's available
+    value: windows.vs2026.amd64
+
 

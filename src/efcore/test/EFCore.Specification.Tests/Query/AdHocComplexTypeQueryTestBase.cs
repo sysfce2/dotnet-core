@@ -12,12 +12,13 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
     [ConditionalFact]
     public virtual async Task Complex_type_equals_parameter_with_nested_types_with_property_of_same_name()
     {
-        var contextFactory = await InitializeAsync<Context33449>(
+        var contextFactory = await InitializeNonSharedTest<Context33449>(
             seed: context =>
             {
                 context.AddRange(
                     new Context33449.EntityType
                     {
+                        Id = 1,
                         ComplexContainer = new Context33449.ComplexContainer
                         {
                             Id = 1,
@@ -28,7 +29,7 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
                 return context.SaveChangesAsync();
             });
 
-        await using var context = contextFactory.CreateContext();
+        await using var context = contextFactory.CreateDbContext();
 
         var container = new Context33449.ComplexContainer
         {
@@ -43,12 +44,15 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
     private class Context33449(DbContextOptions options) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
-            => modelBuilder.Entity<EntityType>().ComplexProperty(
-                b => b.ComplexContainer, x =>
+            => modelBuilder.Entity<EntityType>(b =>
+            {
+                b.Property(b => b.Id).ValueGeneratedNever();
+                b.ComplexProperty(b => b.ComplexContainer, x =>
                 {
                     x.ComplexProperty(c => c.Containee1);
                     x.ComplexProperty(c => c.Containee2);
                 });
+            });
 
         public class EntityType
         {
@@ -82,9 +86,9 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
     [ConditionalFact]
     public virtual async Task Projecting_complex_property_does_not_auto_include_owned_types()
     {
-        var contextFactory = await InitializeAsync<Context34749>();
+        var contextFactory = await InitializeNonSharedTest<Context34749>();
 
-        await using var context = contextFactory.CreateContext();
+        await using var context = contextFactory.CreateDbContext();
 
         _ = await context.Set<Context34749.EntityType>().Select(x => x.Complex).ToListAsync();
     }
@@ -94,6 +98,7 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
         protected override void OnModelCreating(ModelBuilder modelBuilder)
             => modelBuilder.Entity<EntityType>(b =>
             {
+                b.Property(b => b.Id).ValueGeneratedNever();
                 b.ComplexProperty(x => x.Complex);
                 b.OwnsOne(x => x.OwnedReference);
             });
@@ -126,27 +131,30 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
     [ConditionalFact]
     public virtual async Task Optional_complex_type_with_discriminator()
     {
-        var contextFactory = await InitializeAsync<ContextShadowDiscriminator>(
+        var contextFactory = await InitializeNonSharedTest<ContextShadowDiscriminator>(
             seed: context =>
             {
                 context.AddRange(
                     new ContextShadowDiscriminator.EntityType
                     {
+                        Id = 1,
                         AllOptionalsComplexType = new ContextShadowDiscriminator.AllOptionalsComplexType { OptionalProperty = "Non-null" }
                     },
                     new ContextShadowDiscriminator.EntityType
                     {
+                        Id = 2,
                         AllOptionalsComplexType = new ContextShadowDiscriminator.AllOptionalsComplexType { OptionalProperty = null }
                     },
                     new ContextShadowDiscriminator.EntityType
                     {
+                        Id = 3,
                         AllOptionalsComplexType = null
                     }
                     );
                 return context.SaveChangesAsync();
             });
 
-        await using var context = contextFactory.CreateContext();
+        await using var context = contextFactory.CreateDbContext();
 
         var complexTypeNull = await context.Set<ContextShadowDiscriminator.EntityType>().SingleAsync(b => b.AllOptionalsComplexType == null);
         Assert.Null(complexTypeNull.AllOptionalsComplexType);
@@ -158,8 +166,11 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
     private class ContextShadowDiscriminator(DbContextOptions options) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
-            => modelBuilder.Entity<EntityType>()
-                .ComplexProperty(b => b.AllOptionalsComplexType, x => x.HasDiscriminator());
+            => modelBuilder.Entity<EntityType>(b =>
+            {
+                b.Property(b => b.Id).ValueGeneratedNever();
+                b.ComplexProperty(b => b.AllOptionalsComplexType, x => x.HasDiscriminator());
+            });
 
         public class EntityType
         {
@@ -180,12 +191,13 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
     [ConditionalFact]
     public virtual async Task Non_optional_complex_type_with_all_nullable_properties()
     {
-        var contextFactory = await InitializeAsync<Context37162>(
+        var contextFactory = await InitializeNonSharedTest<Context37162>(
             seed: context =>
             {
                 context.Add(
                     new Context37162.EntityType
                     {
+                        Id = 1,
                         NonOptionalComplexType = new Context37162.ComplexTypeWithAllNulls
                         {
                             // All properties are null
@@ -194,7 +206,7 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
                 return context.SaveChangesAsync();
             });
 
-        await using var context = contextFactory.CreateContext();
+        await using var context = contextFactory.CreateDbContext();
 
         var entity = await context.Set<Context37162.EntityType>().SingleAsync();
 
@@ -206,7 +218,11 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
     private class Context37162(DbContextOptions options) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
-            => modelBuilder.Entity<EntityType>().ComplexProperty(b => b.NonOptionalComplexType);
+            => modelBuilder.Entity<EntityType>(b =>
+            {
+                b.Property(b => b.Id).ValueGeneratedNever();
+                b.ComplexProperty(b => b.NonOptionalComplexType);
+            });
 
         public class EntityType
         {
@@ -223,26 +239,104 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
 
     #endregion 37162
 
-    #region Issue37337
+    #region 37304
 
     [ConditionalFact]
-    public virtual async Task Nullable_complex_type_with_discriminator_and_shadow_property()
+    public virtual async Task Non_optional_complex_type_with_all_nullable_properties_via_left_join()
     {
-        var contextFactory = await InitializeAsync<Context37337>(
+        var contextFactory = await InitializeNonSharedTest<Context37304>(
             seed: context =>
             {
                 context.Add(
-                    new Context37337.EntityType
+                    new Context37304.Parent
                     {
-                        Prop = new Context37337.OptionalComplexProperty
-                        {
-                            OptionalValue = true
-                        }
+                        Id = 1,
+                        Children =
+                        [
+                            new Context37304.Child
+                            {
+                                Id = 1,
+                                ComplexType = new Context37304.ComplexTypeWithAllNulls()
+                            }
+                        ]
                     });
                 return context.SaveChangesAsync();
             });
 
-        await using var context = contextFactory.CreateContext();
+        await using var context = contextFactory.CreateDbContext();
+
+        var parent = await context.Set<Context37304.Parent>().Include(p => p.Children).SingleAsync();
+
+        var child = parent.Children.Single();
+        Assert.NotNull(child.ComplexType);
+        Assert.Null(child.ComplexType.NullableString);
+        Assert.Null(child.ComplexType.NullableDateTime);
+    }
+
+    private class Context37304(DbContextOptions options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Parent>(b =>
+            {
+                b.Property(p => p.Id).ValueGeneratedNever();
+            });
+
+            modelBuilder.Entity<Child>(b =>
+            {
+                b.Property(c => c.Id).ValueGeneratedNever();
+                b.HasOne(c => c.Parent).WithMany(p => p.Children).HasForeignKey(c => c.ParentId);
+                b.ComplexProperty(c => c.ComplexType);
+            });
+        }
+
+        public class Parent
+        {
+            public int Id { get; set; }
+            public List<Child> Children { get; set; } = [];
+        }
+
+        public class Child
+        {
+            public int Id { get; set; }
+            public int ParentId { get; set; }
+            public Parent Parent { get; set; } = null!;
+            public ComplexTypeWithAllNulls ComplexType { get; set; } = null!;
+        }
+
+        public class ComplexTypeWithAllNulls
+        {
+            public string? NullableString { get; set; }
+            public DateTime? NullableDateTime { get; set; }
+        }
+    }
+
+    #endregion 37304
+
+    #region Issue37337
+
+    private const string Issue37337CreatedByShadowPropertyName = "CreatedBy";
+
+    [ConditionalFact]
+    public virtual async Task Nullable_complex_type_with_discriminator_and_shadow_property()
+    {
+        var contextFactory = await InitializeNonSharedTest<Context37337>(
+            seed: context =>
+            {
+                var entity = new Context37337.EntityType
+                {
+                    Id = Guid.NewGuid(),
+                    Prop = new Context37337.OptionalComplexProperty
+                    {
+                        OptionalValue = true
+                    }
+                };
+                context.Add(entity);
+                context.Entry(entity).Property(Issue37337CreatedByShadowPropertyName).CurrentValue = "Seeder";
+                return context.SaveChangesAsync();
+            });
+
+        await using var context = contextFactory.CreateDbContext();
 
         var entities = await context.Set<Context37337.EntityType>().ToArrayAsync();
 
@@ -250,14 +344,17 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
         var entity = entities[0];
         Assert.NotNull(entity.Prop);
         Assert.True(entity.Prop.OptionalValue);
+
+        var entry = context.Entry(entity);
+        Assert.Equal("Seeder", entry.Property(Issue37337CreatedByShadowPropertyName).CurrentValue);
     }
 
-    private class Context37337(DbContextOptions options) : DbContext(options)
+    protected class Context37337(DbContextOptions options) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             var entity = modelBuilder.Entity<EntityType>();
-            entity.Property(p => p.Id);
+            entity.Property(p => p.Id).ValueGeneratedNever();
             entity.HasKey(p => p.Id);
 
             var compl = entity.ComplexProperty(p => p.Prop);
@@ -265,7 +362,7 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
             compl.HasDiscriminator();
 
             // Shadow property added via convention (e.g., audit field)
-            entity.Property<string>("CreatedBy").IsRequired(false);
+            entity.Property<string>(Issue37337CreatedByShadowPropertyName).IsRequired(false);
         }
 
         public class EntityType
@@ -282,6 +379,6 @@ public abstract class AdHocComplexTypeQueryTestBase(NonSharedFixture fixture)
 
     #endregion Issue37337
 
-    protected override string StoreName
+    protected override string NonSharedStoreName
         => "AdHocComplexTypeQueryTest";
 }

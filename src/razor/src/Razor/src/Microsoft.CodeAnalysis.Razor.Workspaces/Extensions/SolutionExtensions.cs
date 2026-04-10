@@ -6,10 +6,11 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor;
 using Microsoft.CodeAnalysis.ExternalAccess.Razor;
 using Microsoft.CodeAnalysis.Razor;
-using Microsoft.CodeAnalysis.Razor.ProjectSystem;
 
 namespace Microsoft.CodeAnalysis;
 
@@ -77,23 +78,6 @@ internal static class SolutionExtensions
             ?? ThrowHelper.ThrowInvalidOperationException<Document>($"The document {documentId} did not exist in {solution.FilePath ?? "solution"}.");
     }
 
-    public static Project? GetProject(this Solution solution, ProjectKey projectKey)
-    {
-        return solution.Projects.FirstOrDefault(project => projectKey.Matches(project));
-    }
-
-    public static bool TryGetProject(this Solution solution, ProjectKey projectKey, [NotNullWhen(true)] out Project? result)
-    {
-        result = solution.GetProject(projectKey);
-        return result is not null;
-    }
-
-    public static Project GetRequiredProject(this Solution solution, ProjectKey projectKey)
-    {
-        return solution.GetProject(projectKey)
-            ?? ThrowHelper.ThrowInvalidOperationException<Project>($"The project {projectKey} did not exist in {solution}.");
-    }
-
     public static bool TryGetSourceGeneratedDocumentIdentity(this Solution solution, Uri generatedDocumentUri, out RazorGeneratedDocumentIdentity identity)
     {
         identity = default;
@@ -110,5 +94,16 @@ internal static class SolutionExtensions
         }
 
         return true;
+    }
+
+    public static async Task<SourceGeneratedDocument?> TryGetSourceGeneratedDocumentAsync(this Solution solution, Uri generatedDocumentUri, CancellationToken cancellationToken)
+    {
+        if (!solution.TryGetSourceGeneratedDocumentIdentity(generatedDocumentUri, out var identity) ||
+            !solution.TryGetProject(identity.DocumentId.ProjectId, out var project))
+        {
+            return null;
+        }
+
+        return await project.TryGetCSharpDocumentForGeneratedDocumentAsync(identity, cancellationToken).ConfigureAwait(false);
     }
 }

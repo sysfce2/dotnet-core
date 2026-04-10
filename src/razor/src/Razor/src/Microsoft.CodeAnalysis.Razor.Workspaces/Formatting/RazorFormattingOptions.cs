@@ -21,6 +21,8 @@ internal readonly record struct RazorFormattingOptions
     public AttributeIndentStyle AttributeIndentStyle { get; init; } = AttributeIndentStyle.AlignWithFirst;
     [DataMember(Order = 4)]
     public RazorCSharpSyntaxFormattingOptions? CSharpSyntaxFormattingOptions { get; init; }
+    [DataMember(Order = 5)]
+    public bool FromPaste { get; init; } = false;
 
     public RazorFormattingOptions()
     {
@@ -42,7 +44,18 @@ internal readonly record struct RazorFormattingOptions
             TabSize = options.TabSize,
             CodeBlockBraceOnNextLine = codeBlockBraceOnNextLine,
             AttributeIndentStyle = attributeIndentStyle,
-            CSharpSyntaxFormattingOptions = csharpSyntaxFormattingOptions
+            CSharpSyntaxFormattingOptions = csharpSyntaxFormattingOptions,
+        };
+
+    public static RazorFormattingOptions From(FormattingOptions options, bool codeBlockBraceOnNextLine, AttributeIndentStyle attributeIndentStyle, RazorCSharpSyntaxFormattingOptions csharpSyntaxFormattingOptions, bool fromPaste)
+        => new()
+        {
+            InsertSpaces = options.InsertSpaces,
+            TabSize = options.TabSize,
+            CodeBlockBraceOnNextLine = codeBlockBraceOnNextLine,
+            AttributeIndentStyle = attributeIndentStyle,
+            CSharpSyntaxFormattingOptions = csharpSyntaxFormattingOptions,
+            FromPaste = fromPaste
         };
 
     public RazorIndentationOptions ToIndentationOptions()

@@ -4,6 +4,7 @@
     <PackagesOutput>$(ProjectDirectory)src/Spectre.Console/bin/$(Configuration)/</PackagesOutput>
     <GlobalJsonFile>$(ProjectDirectory)global.json</GlobalJsonFile>
     <CustomRepoBuild>true</CustomRepoBuild>
+    <SourceRevisionId>e097281ca8a50268b1022453fe6efd9112123a28</SourceRevisionId>
   </PropertyGroup>
 
   <Target Name="CustomRepoBuild">
@@ -14,7 +15,10 @@
       <BuildCommandArgs>$(BuildCommandArgs) /p:PublicSign=$(PublicSign)</BuildCommandArgs>
       <BuildCommandArgs>$(BuildCommandArgs) /v:$(LogVerbosity)</BuildCommandArgs>
       <BuildCommandArgs>$(BuildCommandArgs) $(RedirectRepoOutputToLog)</BuildCommandArgs>
+      <BuildCommandArgs>$(BuildCommandArgs) /p:AssemblyVersion=$(SpectreConsoleReleaseVersion.Split('.')[0]).0.0.0</BuildCommandArgs>
       <BuildCommandArgs>$(BuildCommandArgs) /p:Version=$(SpectreConsoleReleaseVersion)</BuildCommandArgs>
+      <BuildCommandArgs>$(BuildCommandArgs) /p:FileVersion=$(SpectreConsoleReleaseVersion).0</BuildCommandArgs>
+      <BuildCommandArgs>$(BuildCommandArgs) /p:InformationalVersion=$(SpectreConsoleReleaseVersion)</BuildCommandArgs>
       <BuildCommandArgs>$(BuildCommandArgs) /p:TargetFrameworks=$(NetCurrent)</BuildCommandArgs>
       <BuildCommandArgs>$(BuildCommandArgs) /p:UseBuildTimeTools=false</BuildCommandArgs>
       <BuildCommandArgs>$(BuildCommandArgs) /p:IsAotCompatible=false</BuildCommandArgs>

@@ -2,11 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
-using Microsoft.AspNetCore.Razor;
 using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.PooledObjects;
 using Microsoft.CodeAnalysis;
@@ -19,172 +17,6 @@ namespace Microsoft.CodeAnalysis.Razor.DocumentMapping;
 internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocumentMappingService
 {
     protected readonly ILogger Logger = logger;
-
-    public IEnumerable<TextChange> GetRazorDocumentEdits(RazorCSharpDocument csharpDocument, ImmutableArray<TextChange> csharpChanges)
-    {
-        var csharpSourceText = csharpDocument.Text;
-        var lastNewLineAddedToLine = 0;
-
-        foreach (var change in csharpChanges)
-        {
-            var span = change.Span;
-            // Deliberately doing a naive check to avoid telemetry for truly bad data
-            if (span.Start <= 0 || span.Start >= csharpSourceText.Length || span.End <= 0 || span.End >= csharpSourceText.Length)
-            {
-                continue;
-            }
-
-            var (startLine, startChar) = csharpSourceText.GetLinePosition(span.Start);
-            var (endLine, _) = csharpSourceText.GetLinePosition(span.End);
-
-            var mappedStart = this.TryMapToRazorDocumentPosition(csharpDocument, span.Start, out var hostDocumentStart, out var hostStartIndex);
-            var mappedEnd = this.TryMapToRazorDocumentPosition(csharpDocument, span.End, out var hostDocumentEnd, out var hostEndIndex);
-
-            // Ideal case, both start and end can be mapped so just return the edit
-            if (mappedStart && mappedEnd)
-            {
-                // If the previous edit was on the same line, and added a newline, then we need to add a space
-                // between this edit and the previous one, because the normalization will have swallowed it. See
-                // below for a more info.
-                var newText = (lastNewLineAddedToLine == startLine ? " " : "") + change.NewText;
-                yield return new TextChange(TextSpan.FromBounds(hostStartIndex, hostEndIndex), newText);
-                continue;
-            }
-
-            // For the first line of a code block the C# formatter will often return an edit that starts
-            // before our mapping, but ends within. In those cases, when the edit spans multiple lines
-            // we just take the last line and try to use that.
-            //
-            // eg in the C# document you might see:
-            //
-            //      protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder)
-            //      {
-            // #nullable restore
-            // #line 1 "/path/to/Document.component"
-            //
-            //          var x = DateTime.Now;
-            //
-            // To indent the 'var x' line the formatter will return an edit that starts the line before,
-            // with a NewText of '\n            '. The start of that edit is outside our mapping, but we
-            // still want to know how to format the 'var x' line, so we have to break up the edit.
-            if (!mappedStart && mappedEnd && startLine != endLine)
-            {
-                // Construct a theoretical edit that is just for the last line of the edit that the C# formatter
-                // gave us, and see if we can map that.
-                // The +1 here skips the newline character that is found, but also protects from Substring throwing
-                // if there are no newlines (which should be impossible anyway)
-                var lastNewLine = change.NewText.AssumeNotNull().LastIndexOfAny(['\n', '\r']) + 1;
-
-                // Strictly speaking we could be dropping more lines than we need to, because our mapping point could be anywhere within the edit
-                // but we know that the C# formatter will only be returning blank lines up until the first bit of content that needs to be indented
-                // so we can ignore all but the last line. This assert ensures that is true, just in case something changes in Roslyn
-                Debug.Assert(lastNewLine == 0 || change.NewText[..(lastNewLine - 1)].All(c => c == '\r' || c == '\n'), "We are throwing away part of an edit that has more than just empty lines!");
-
-                var startSync = csharpSourceText.TryGetAbsoluteIndex((endLine, 0), out var startIndex);
-                if (startSync is false)
-                {
-                    break;
-                }
-
-                mappedStart = this.TryMapToRazorDocumentPosition(csharpDocument, startIndex, out _, out hostStartIndex);
-
-                if (mappedStart && mappedEnd)
-                {
-                    yield return new TextChange(TextSpan.FromBounds(hostStartIndex, hostEndIndex), change.NewText[lastNewLine..]);
-                    continue;
-                }
-            }
-
-            // The opposite case of the above: for the last line of a code block, the C# formatter might
-            // return an edit that starts within our mapping, but ends after. In those cases, when the edit
-            // spans multiple lines we just take the first line and try to use that.
-            //
-            // This can happen with code actions that remove content, where the edit starts inside the mapped
-            // region but extends beyond it. For example, when removing an unused variable in a single-line
-            // explicit statement block like `@{ var x = 1; }`, Roslyn may generate edits that span beyond
-            // the mapped C# region.
-            if (mappedStart && !mappedEnd && startLine != endLine)
-            {
-                // Construct a theoretical edit that is just for the first line of the edit that the C# formatter
-                // gave us, and see if we can map that.
-
-                // Get the end of the start line
-                if (!csharpSourceText.TryGetAbsoluteIndex(startLine, csharpSourceText.Lines[startLine].Span.Length, out var endIndex))
-                {
-                    break;
-                }
-
-                if (this.TryMapToRazorDocumentPosition(csharpDocument, endIndex, out _, out hostEndIndex))
-                {
-                    // If there's a newline in the new text, only take the part before it
-                    var firstNewLine = change.NewText.AssumeNotNull().IndexOfAny(['\n', '\r']);
-                    var newText = firstNewLine >= 0 ? change.NewText[..firstNewLine] : change.NewText;
-                    yield return new TextChange(TextSpan.FromBounds(hostStartIndex, hostEndIndex), newText);
-                    continue;
-                }
-            }
-
-            // If we couldn't map either the start or the end then we still might want to do something tricky.
-            // When we have a block like this:
-            //
-            // @functions {
-            //    class Goo
-            //    {
-            //    }
-            // }
-            //
-            // The source mapping starts at char 13 on the "@functions" line (after the open brace). Unfortunately
-            // and code that is needed on that line, say an attribute that the code action wants to insert, will
-            // start at char 8 because of the desired indentation of that new code. This means it starts outside of the
-            // mapping, so is thrown away, which results in data loss.
-            //
-            // To fix this we check and if the mapping would have been successful at the end of the line (char 13 above)
-            // then we insert a newline, and enough indentation to get us back out to where the new code wanted to start (char 8)
-            // and then we're good - we've left the @functions bit alone which razor needs, but we're still able to insert
-            // new code above where the C# code is in the generated document.
-            //
-            // One last hurdle is that sometimes these edits come in as separate edits. So for example replacing "class Goo" above
-            // with "public class Goo" would come in as one edit for "public", one for "class" and one for "Goo", all on the same line.
-            // When we map the edit for "public" we will push everything down a line, so we don't want to do it for other edits
-            // on that line.
-            if (!mappedStart && !mappedEnd && startLine == endLine)
-            {
-                // If the new text doesn't have any content we don't care - throwing away invisible whitespace is fine
-                if (string.IsNullOrWhiteSpace(change.NewText))
-                {
-                    continue;
-                }
-
-                var line = csharpSourceText.Lines[startLine];
-
-                // If the line isn't blank, then this isn't a functions directive
-                if (line.GetFirstNonWhitespaceOffset() is not null)
-                {
-                    continue;
-                }
-
-                // Only do anything if the end of the line in question is a valid mapping point (ie, a transition)
-                if (this.TryMapToRazorDocumentPosition(csharpDocument, line.Span.End, out _, out hostEndIndex))
-                {
-                    if (startLine == lastNewLineAddedToLine)
-                    {
-                        // If we already added a newline to this line, then we don't want to add another one, but
-                        // we do need to add a space between this edit and the previous one, because the normalization
-                        // will have swallowed it.
-                        yield return new TextChange(new TextSpan(hostEndIndex, 0), " " + change.NewText);
-                    }
-                    else
-                    {
-                        // Otherwise, add a newline and the real content, and remember where we added it
-                        lastNewLineAddedToLine = startLine;
-                        yield return new TextChange(new TextSpan(hostEndIndex, 0), " " + Environment.NewLine + new string(' ', startChar) + change.NewText);
-                    }
-
-                    continue;
-                }
-            }
-        }
-    }
 
     public bool TryMapToRazorDocumentRange(RazorCSharpDocument csharpDocument, LinePositionSpan csharpRange, MappingBehavior mappingBehavior, out LinePositionSpan razorRange)
     {
@@ -264,7 +96,7 @@ internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocume
 
         using var builder = new PooledArrayBuilder<LinePositionSpan>();
 
-        foreach (var mapping in csharpDocument.SourceMappings)
+        foreach (var mapping in csharpDocument.SourceMappingsSortedByOriginal)
         {
             var originalSpan = mapping.OriginalSpan.ToLinePositionSpan();
 
@@ -274,6 +106,11 @@ internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocume
 
                 builder.Add(generatedSpan);
             }
+            else if (originalSpan.Start > razorSpan.End)
+            {
+                // This span (and all following) are after the area we're interested in
+                break;
+            }
         }
 
         return builder.ToImmutableAndClear();
@@ -281,11 +118,7 @@ internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocume
 
     public bool TryMapToRazorDocumentPosition(RazorCSharpDocument csharpDocument, int csharpIndex, out LinePosition razorPosition, out int razorIndex)
     {
-        var sourceMappings = csharpDocument.SourceMappings;
-
-        // We expect source mappings to be ordered by their generated document absolute index, because that is how the compiler creates them: As it
-        // outputs the generated file to the text write.
-        Debug.Assert(sourceMappings.SequenceEqual(sourceMappings.OrderBy(s => s.GeneratedSpan.AbsoluteIndex)));
+        var sourceMappings = csharpDocument.SourceMappingsSortedByGenerated;
 
         var index = sourceMappings.BinarySearchBy(csharpIndex, static (mapping, generatedDocumentIndex) =>
         {
@@ -330,7 +163,11 @@ internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocume
 
     private static bool TryMapToCSharpDocumentPositionInternal(RazorCSharpDocument csharpDocument, int razorIndex, bool nextCSharpPositionOnFailure, out LinePosition csharpPosition, out int csharpIndex)
     {
-        foreach (var mapping in csharpDocument.SourceMappings)
+        SourceMapping? nextCSharpMapping = null;
+
+        var hostDocumentLine = csharpDocument.CodeDocument.Source.Text.GetLinePosition(razorIndex).Line;
+
+        foreach (var mapping in csharpDocument.SourceMappingsSortedByOriginal)
         {
             var originalSpan = mapping.OriginalSpan;
             var originalAbsoluteIndex = originalSpan.AbsoluteIndex;
@@ -346,21 +183,29 @@ internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocume
                     return true;
                 }
             }
-            else if (nextCSharpPositionOnFailure)
+            else if (nextCSharpPositionOnFailure &&
+                mapping.OriginalSpan.LineIndex == hostDocumentLine &&
+                mapping.OriginalSpan.AbsoluteIndex >= razorIndex &&
+                (nextCSharpMapping is null || mapping.OriginalSpan.AbsoluteIndex < nextCSharpMapping.OriginalSpan.AbsoluteIndex))
             {
                 // The "next" C# location is only valid if it is on the same line in the source document
-                // as the requested position.
-                var hostDocumentLinePosition = csharpDocument.CodeDocument.Source.Text.GetLinePosition(razorIndex);
-
-                if (mapping.OriginalSpan.LineIndex == hostDocumentLinePosition.Line)
-                {
-                    csharpIndex = mapping.GeneratedSpan.AbsoluteIndex;
-                    csharpPosition = csharpDocument.Text.GetLinePosition(csharpIndex);
-                    return true;
-                }
-
+                // as the requested position, and before than any previous "next" C# position we have found,
+                // comparing their original positions.  Due to source mappings being ordered by generated span,
+                // not original span, its possible for things to be out of order.
+                nextCSharpMapping = mapping;
+            }
+            else
+            {
+                // This span (and all following) are after the area we're interested in
                 break;
             }
+        }
+
+        if (nextCSharpPositionOnFailure && nextCSharpMapping is not null)
+        {
+            csharpIndex = nextCSharpMapping.GeneratedSpan.AbsoluteIndex;
+            csharpPosition = csharpDocument.Text.GetLinePosition(csharpIndex);
+            return true;
         }
 
         csharpPosition = default;
@@ -427,23 +272,24 @@ internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocume
         }
 
         using var _1 = ListPool<SourceMapping>.GetPooledObject(out var candidateMappings);
+        var sourceMappings = csharpDocument.SourceMappingsSortedByGenerated;
         if (startMappedDirectly)
         {
             // Start of generated range intersects with a mapping
             candidateMappings.AddRange(
-                csharpDocument.SourceMappings.Where(mapping => IntersectsWith(startIndex, mapping.GeneratedSpan)));
+                sourceMappings.Where(mapping => IntersectsWith(startIndex, mapping.GeneratedSpan)));
         }
         else if (endMappedDirectly)
         {
             // End of generated range intersects with a mapping
             candidateMappings.AddRange(
-                csharpDocument.SourceMappings.Where(mapping => IntersectsWith(endIndex, mapping.GeneratedSpan)));
+                sourceMappings.Where(mapping => IntersectsWith(endIndex, mapping.GeneratedSpan)));
         }
         else
         {
             // Our range does not intersect with any mapping; we should see if it overlaps generated locations
             candidateMappings.AddRange(
-                csharpDocument.SourceMappings
+                sourceMappings
                     .Where(mapping => Overlaps(csharpSourceText.GetTextSpan(csharpRange), mapping.GeneratedSpan)));
         }
 
@@ -496,20 +342,21 @@ internal abstract class AbstractDocumentMappingService(ILogger logger) : IDocume
         var generatedRangeAsSpan = csharpSourceText.GetTextSpan(csharpRange);
         SourceMapping? mappingBeforeGeneratedRange = null;
         SourceMapping? mappingAfterGeneratedRange = null;
+        var sourceMappings = csharpDocument.SourceMappingsSortedByGenerated;
 
-        for (var i = csharpDocument.SourceMappings.Length - 1; i >= 0; i--)
+        for (var i = sourceMappings.Length - 1; i >= 0; i--)
         {
-            var sourceMapping = csharpDocument.SourceMappings[i];
+            var sourceMapping = sourceMappings[i];
             var sourceMappingEnd = sourceMapping.GeneratedSpan.AbsoluteIndex + sourceMapping.GeneratedSpan.Length;
             if (generatedRangeAsSpan.Start >= sourceMappingEnd)
             {
                 // This is the source mapping that's before us!
                 mappingBeforeGeneratedRange = sourceMapping;
 
-                if (i + 1 < csharpDocument.SourceMappings.Length)
+                if (i + 1 < sourceMappings.Length)
                 {
                     // We're not at the end of the document there's another source mapping after us
-                    mappingAfterGeneratedRange = csharpDocument.SourceMappings[i + 1];
+                    mappingAfterGeneratedRange = sourceMappings[i + 1];
                 }
 
                 break;

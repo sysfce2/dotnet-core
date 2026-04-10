@@ -10,12 +10,6 @@ namespace Microsoft.AspNetCore.Razor.Language;
 
 internal static partial class RazorCodeDocumentExtensions
 {
-    // This is modified copy of the ClassifiedSpanVisitor from the legacy compiler APIs.
-    // It is streamlined to only produce the information needed for tooling's
-    // GetLanguageKind() API.
-    //
-    // Note that the legacy ClassifiedSpanVisitor will be removed with the legacy editor.
-
     private enum SpanKind
     {
         Transition,
@@ -144,6 +138,14 @@ internal static partial class RazorCodeDocumentExtensions
             using (ExpressionBlock())
             {
                 base.VisitCSharpImplicitExpression(node);
+            }
+        }
+
+        public override void VisitRazorUsingDirective(RazorUsingDirectiveSyntax node)
+        {
+            using (DirectiveBlock())
+            {
+                base.VisitRazorUsingDirective(node);
             }
         }
 

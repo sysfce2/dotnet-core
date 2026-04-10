@@ -1,8 +1,6 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.InteropServices;
-
 namespace Windows.Win32.Foundation;
 
 /// <summary>
@@ -44,5 +42,9 @@ internal interface IHandle<THandle> where THandle : unmanaged
     ///   <see cref="IHandle{THandle}"/> is on a struct. See <see cref="HandleRef{THandle}"/> for a concrete usage.
     ///  </para>
     /// </remarks>
+#if NET
     object? Wrapper => this;
+#else
+    object? Wrapper { get; }
+#endif
 }

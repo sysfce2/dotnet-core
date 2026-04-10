@@ -2,8 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Drawing;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace Windows.Win32.Graphics.Gdi;
 
@@ -55,8 +53,6 @@ internal readonly struct ARGB
         return colors;
     }
 
-    public static Color[] ToColorArray(params ReadOnlySpan<uint> argbColors) => ToColorArray(
-        MemoryMarshal.CreateReadOnlySpan(
-            ref Unsafe.As<uint, ARGB>(ref MemoryMarshal.GetReference(argbColors)),
-            argbColors.Length));
+    public static Color[] ToColorArray(params ReadOnlySpan<uint> argbColors) =>
+        ToColorArray(MemoryMarshal.Cast<uint, ARGB>(argbColors));
 }

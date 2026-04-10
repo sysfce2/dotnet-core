@@ -11,6 +11,7 @@ using System.Xml.Linq;
 using NuGet.CommandLine.XPlat;
 using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.Frameworks;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Test.Utility;
@@ -109,13 +110,54 @@ namespace NuGet.XPlat.FuncTest
 
         public static SimpleTestProjectContext CreateProject(string projectName,
             SimpleTestPathContext pathContext,
-            string projectFrameworks)
+            string projectFrameworks,
+            bool fileBasedApp = false)
         {
             var settings = Settings.LoadDefaultSettings(Path.GetDirectoryName(pathContext.NuGetConfig), Path.GetFileName(pathContext.NuGetConfig), null);
             var project = SimpleTestProjectContext.CreateNETCoreWithSDK(
                     projectName: projectName,
                     solutionRoot: pathContext.SolutionRoot,
                     frameworks: MSBuildStringUtility.Split(projectFrameworks));
+
+            project.FallbackFolders = (IList<string>)SettingsUtility.GetFallbackPackageFolders(settings);
+            project.GlobalPackagesFolder = SettingsUtility.GetGlobalPackagesFolder(settings);
+            var packageSourceProvider = new PackageSourceProvider(settings);
+            project.Sources = packageSourceProvider.LoadPackageSources();
+
+            if (fileBasedApp)
+            {
+                project.VirtualProjectPath = project.ProjectPath;
+                project.ProjectPath = Path.ChangeExtension(project.ProjectPath, ".cs");
+                Directory.CreateDirectory(Path.GetDirectoryName(project.ProjectPath)!);
+                File.WriteAllText(project.ProjectPath, ""); // commands might check the file's existence
+            }
+
+            project.Save();
+
+            return project;
+        }
+
+        public static SimpleTestProjectContext CreateProject(string projectName,
+            SimpleTestPathContext pathContext,
+            string projectFrameworks,
+            string projectTargetFrameworkMonikers)
+        {
+            var settings = Settings.LoadDefaultSettings(Path.GetDirectoryName(pathContext.NuGetConfig), Path.GetFileName(pathContext.NuGetConfig), null);
+            var actualProjectFrameworks = MSBuildStringUtility.Split(projectFrameworks);
+            var actualTfms = MSBuildStringUtility.Split(projectTargetFrameworkMonikers);
+            var project = new SimpleTestProjectContext(projectName, ProjectStyle.PackageReference, pathContext.SolutionRoot);
+            project.ToolingVersion15 = true;
+            project.Properties.Add("BuildWithNetFrameworkHostedCompiler", bool.FalseString);
+
+            for (int i = 0; i < actualProjectFrameworks.Length; i++)
+            {
+                var fw = new SimpleTestProjectFrameworkContext(NuGetFramework.Parse(actualTfms[i]))
+                {
+                    TargetAlias = actualProjectFrameworks[i]
+                };
+                fw.Properties.Add("TargetFrameworkMoniker", actualTfms[i]);
+                project.Frameworks.Add(fw);
+            }
 
             project.FallbackFolders = (IList<string>)SettingsUtility.GetFallbackPackageFolders(settings);
             project.GlobalPackagesFolder = SettingsUtility.GetGlobalPackagesFolder(settings);
@@ -344,6 +386,16 @@ namespace NuGet.XPlat.FuncTest
             return frameworksA.ToList()
                 .Intersect(frameworksB.ToList())
                 .First();
+        }
+
+        public static XDocument LoadCSProj(SimpleTestProjectContext project)
+        {
+            if (project.VirtualProjectContent != null)
+            {
+                return XDocument.Parse(project.VirtualProjectContent);
+            }
+
+            return LoadCSProj(project.ProjectPath);
         }
 
         public static XDocument LoadCSProj(string path)

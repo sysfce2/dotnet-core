@@ -300,6 +300,11 @@ namespace NuGet.Commands
             NuGetFramework framework,
             PackageBuilder builder)
         {
+            if (dependencies == null)
+            {
+                throw new ArgumentNullException(nameof(dependencies));
+            }
+
             ISet<PackageDependency> packageDependencies = new HashSet<PackageDependency>();
 
             foreach (LibraryDependency dependency in dependencies)
@@ -453,7 +458,8 @@ namespace NuGet.Commands
                     _packArgs.GetPropertyValue,
                     !_packArgs.ExcludeEmptyDirectories,
                     _packArgs.Deterministic,
-                    _packArgs.Logger);
+                    _packArgs.Logger,
+                    _packArgs.Version);
             }
 
             return new PackageBuilder(
@@ -462,7 +468,8 @@ namespace NuGet.Commands
                 _packArgs.GetPropertyValue,
                 !_packArgs.ExcludeEmptyDirectories,
                 _packArgs.Deterministic,
-                _packArgs.Logger);
+                _packArgs.Logger,
+                _packArgs.Version);
         }
 
         private bool BuildFromProjectFile(string path)

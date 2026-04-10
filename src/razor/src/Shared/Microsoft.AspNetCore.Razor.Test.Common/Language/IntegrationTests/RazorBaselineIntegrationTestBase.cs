@@ -156,7 +156,7 @@ public abstract class RazorBaselineIntegrationTestBase : RazorIntegrationTestBas
         var linePragmas = csharpDocument.LinePragmas;
         if (DesignTime)
         {
-            var sourceMappings = csharpDocument.SourceMappings;
+            var sourceMappings = csharpDocument.SourceMappingsSortedByOriginal;
             foreach (var sourceMapping in sourceMappings)
             {
                 var content = codeDocument.Source.Text.GetSubText(new TextSpan(sourceMapping.OriginalSpan.AbsoluteIndex, sourceMapping.OriginalSpan.Length)).ToString();
@@ -182,7 +182,7 @@ public abstract class RazorBaselineIntegrationTestBase : RazorIntegrationTestBas
         }
         else
         {
-            var syntaxTree = codeDocument.GetRequiredSyntaxTree();
+            var syntaxTree = codeDocument.GetTagHelperRewrittenSyntaxTree() ?? codeDocument.GetRequiredSyntaxTree();
             var sourceContent = syntaxTree.Source.Text.ToString();
             var classifiedSpans = syntaxTree.GetClassifiedSpans();
             foreach (var classifiedSpan in classifiedSpans)

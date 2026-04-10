@@ -15,9 +15,6 @@
     <SkipSetTargetOS>true</SkipSetTargetOS>
     <BuildArgs>$(BuildArgs) $(FlagParameterPrefix)os $(TargetOS)</BuildArgs>
 
-    <!-- May stabilize. -->
-    <AllowDotNetFinalVersionKindOverride>true</AllowDotNetFinalVersionKindOverride>
-
     <!--
       When building a vertical where we explicitly request using the Mono runtime, only build the Mono runtime.
       This is generally used in source-build scenarios where the target RID is only supported on Mono
@@ -40,7 +37,8 @@
     <BuildArgs Condition="'$(BuildBootstrap)' == 'true'">$(BuildArgs) $(FlagParameterPrefix)bootstrap</BuildArgs>
 
     <!-- If this build is not a "special flavor" build, build everything that can be built for this target. -->
-    <BuildArgs Condition="'$(DotNetBuildUseMonoRuntime)' != 'true'">$(BuildArgs) /p:DotNetBuildAllRuntimePacks=true</BuildArgs>
+    <BuildArgs Condition="'$(DotNetBuildUseMonoRuntime)' != 'true' and '$(TargetOS)' != 'browser'">$(BuildArgs) /p:DotNetBuildAllRuntimePacks=true</BuildArgs>
+    <BuildArgs Condition="'$(DotNetBuildUseMonoRuntime)' == 'false' and '$(TargetOS)' == 'browser'">$(BuildArgs) /p:RuntimeFlavor=CoreCLR</BuildArgs>
 
     <!-- When we're actually doing signing and the ESRP tool is available, forward down the path to the repo builds. -->
     <BuildArgs Condition="'$(DotNetBuildSign)' == 'true' and '$(ForceDryRunSigning)' != 'true' and '$(DotNetEsrpToolPath)' != ''">$(BuildArgs) /p:DotNetEsrpToolPath=$(DotNetEsrpToolPath)</BuildArgs>
@@ -58,6 +56,7 @@
     <!-- TODO: llvm-libunwind -->
     <BuildArgs Condition="$(UseSystemLibs.Contains('+rapidjson')) or $(UseSystemLibs.Contains('+all'))">$(BuildArgs) --cmakeargs -DCLR_CMAKE_USE_SYSTEM_RAPIDJSON=true</BuildArgs>
     <BuildArgs Condition="$(UseSystemLibs.Contains('+zlib')) or $(UseSystemLibs.Contains('+all'))">$(BuildArgs) --cmakeargs -DCLR_CMAKE_USE_SYSTEM_ZLIB=true</BuildArgs>
+    <BuildArgs Condition="$(UseSystemLibs.Contains('+zstd')) or $(UseSystemLibs.Contains('+all'))">$(BuildArgs) --cmakeargs -DCLR_CMAKE_USE_SYSTEM_ZSTD=true</BuildArgs>
     <BuildArgs Condition="$(UseSystemLibs.Contains('-lttng'))">$(BuildArgs) /p:FeatureXplatEventSource=false</BuildArgs>
   </PropertyGroup>
 

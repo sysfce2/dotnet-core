@@ -1,3 +1,7 @@
+# This yml is used by these pipelines:
+# - dotnet-unified-build-compare (internal)
+#   https://dev.azure.com/dnceng/internal/_build?definitionId=1447
+
 # Relies on dotnet-unified-build being in the same repo as this pipeline
 # https://learn.microsoft.com/en-us/azure/devops/pipelines/process/pipeline-triggers?view=azure-devops#branch-considerations
 
@@ -5,15 +9,10 @@ resources:
   pipelines:
   - pipeline: dotnet-unified-build
     source: dotnet-unified-build
-    # Run on every build of the main branch.
-    # For releases branches only run on internal/release branches because that's where dependencies flow.
-    # Previews don't have internal/release branches so they must be run from non-internal release branches.
     trigger:
       branches:
         include:
         - refs/heads/main
-        - refs/heads/release/*.0.1xx-preview*
-        - refs/heads/internal/release/*.0.1xx*
       stages:
       - Publish_Build_Assets
 
@@ -53,6 +52,8 @@ variables:
 extends:
   template: v1/1ES.Unofficial.PipelineTemplate.yml@1ESPipelineTemplates
   parameters:
+    settings:
+      networkIsolationPolicy: Permissive, CFSClean, CFSClean2
     featureFlags:
       incrementalSDLBinaryAnalysis: true
     sdl:

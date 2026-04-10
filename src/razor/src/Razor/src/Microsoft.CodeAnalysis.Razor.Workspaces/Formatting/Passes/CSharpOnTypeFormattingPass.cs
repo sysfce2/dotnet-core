@@ -20,6 +20,7 @@ using Microsoft.CodeAnalysis.ExternalAccess.Razor;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Razor.DocumentMapping;
 using Microsoft.CodeAnalysis.Razor.Logging;
+using Microsoft.CodeAnalysis.Razor.Protocol;
 using Microsoft.CodeAnalysis.Razor.TextDifferencing;
 using Microsoft.CodeAnalysis.Razor.Workspaces;
 using Microsoft.CodeAnalysis.Text;
@@ -33,10 +34,12 @@ namespace Microsoft.CodeAnalysis.Razor.Formatting;
 /// </summary>
 internal sealed class CSharpOnTypeFormattingPass(
     IDocumentMappingService documentMappingService,
+    IRazorEditService razorEditService,
     IHostServicesProvider hostServicesProvider,
     ILoggerFactory loggerFactory) : IFormattingPass
 {
     private readonly IDocumentMappingService _documentMappingSerivce = documentMappingService;
+    private readonly IRazorEditService _razorEditService = razorEditService;
     private readonly IHostServicesProvider _hostServicesProvider = hostServicesProvider;
     private readonly ILogger _logger = loggerFactory.GetOrCreateLogger<CSharpOnTypeFormattingPass>();
 
@@ -102,17 +105,16 @@ internal sealed class CSharpOnTypeFormattingPass(
 
         context.Logger?.LogSourceText("FormattedCSharp", originalTextWithChanges);
 
-        var mappedChanges = _documentMappingSerivce.GetRazorDocumentEdits(codeDocument.GetRequiredCSharpDocument(), normalizedChanges);
-        var filteredChanges = FilterCSharpTextChanges(context, mappedChanges);
+        var mappedChanges = await _razorEditService.MapCSharpEditsAsync(
+            normalizedChanges.SelectAsArray(static c => c.ToRazorTextChange()),
+            context.CurrentSnapshot,
+            context.IncludeCSharpLanguageFeatureEdits,
+            cancellationToken).ConfigureAwait(false);
+
+        var filteredChanges = FilterCSharpTextChanges(context, mappedChanges.SelectAsArray(static e => e.ToTextChange()));
         if (filteredChanges.Length == 0)
         {
-            // There are no C# edits for us to apply that could be mapped, but we might still need to check for using statements
-            // because they are non mappable, but might be the only thing changed (eg from the Add Using code action)
-            //
-            // If there aren't any edits that are likely to contain using statement changes, this call will no-op.
-            filteredChanges = await AddUsingStatementEditsIfNecessaryAsync(context, changes, originalTextWithChanges, filteredChanges, cancellationToken).ConfigureAwait(false);
-
-            return filteredChanges;
+            return [];
         }
 
         // Find the lines that were affected by these edits.
@@ -198,31 +200,11 @@ internal sealed class CSharpOnTypeFormattingPass(
         }
 
         // Now that we have made all the necessary changes to the document. Let's diff the original vs final version and return the diff.
-        var finalChanges = SourceTextDiffer.GetMinimalTextChanges(originalText, cleanedText, DiffKind.Char);
-
-        finalChanges = await AddUsingStatementEditsIfNecessaryAsync(context, changes, originalTextWithChanges, finalChanges, cancellationToken).ConfigureAwait(false);
-
-        return finalChanges;
-    }
-
-    private static async Task<ImmutableArray<TextChange>> AddUsingStatementEditsIfNecessaryAsync(FormattingContext context, ImmutableArray<TextChange> changes, SourceText originalTextWithChanges, ImmutableArray<TextChange> finalChanges, CancellationToken cancellationToken)
-    {
-        if (context.AutomaticallyAddUsings)
-        {
-            // Because we need to parse the C# code twice for this operation, lets do a quick check to see if its even necessary
-            if (changes.Any(static e => e.NewText is not null && e.NewText.IndexOf("using") != -1))
-            {
-                var usingStatementEdits = await AddUsingsHelper.GetUsingStatementEditsAsync(context.CurrentSnapshot, originalTextWithChanges, cancellationToken).ConfigureAwait(false);
-                var usingStatementChanges = usingStatementEdits.Select(context.CodeDocument.Source.Text.GetTextChange);
-                finalChanges = [.. usingStatementChanges, .. finalChanges];
-            }
-        }
-
-        return finalChanges;
+        return SourceTextDiffer.GetMinimalTextChanges(originalText, cleanedText, DiffKind.Char);
     }
 
     // Returns the minimal TextSpan that encompasses all the differences between the old and the new text.
-    private static SourceText ApplyChangesAndTrackChange(SourceText oldText, IEnumerable<TextChange> changes, out TextSpan spanBeforeChange, out TextSpan spanAfterChange)
+    private static SourceText ApplyChangesAndTrackChange(SourceText oldText, ImmutableArray<TextChange> changes, out TextSpan spanBeforeChange, out TextSpan spanAfterChange)
     {
         var newText = oldText.WithChanges(changes);
         var affectedRange = newText.GetEncompassingTextChangeRange(oldText);
@@ -233,7 +215,7 @@ internal sealed class CSharpOnTypeFormattingPass(
         return newText;
     }
 
-    private static ImmutableArray<TextChange> FilterCSharpTextChanges(FormattingContext context, IEnumerable<TextChange> changes)
+    private static ImmutableArray<TextChange> FilterCSharpTextChanges(FormattingContext context, ImmutableArray<TextChange> changes)
     {
         var indent = context.GetIndentationLevelString(1);
 
@@ -299,12 +281,18 @@ internal sealed class CSharpOnTypeFormattingPass(
         var csharpDocument = context.CodeDocument.GetRequiredCSharpDocument();
 
         using var changes = new PooledArrayBuilder<TextChange>();
-        foreach (var mapping in csharpDocument.SourceMappings)
+        foreach (var mapping in csharpDocument.SourceMappingsSortedByOriginal)
         {
             var mappingSpan = new TextSpan(mapping.OriginalSpan.AbsoluteIndex, mapping.OriginalSpan.Length);
             var mappingLinePositionSpan = text.GetLinePositionSpan(mappingSpan);
             if (!spanAfterFormatting.LineOverlapsWith(mappingLinePositionSpan))
             {
+                if (mappingLinePositionSpan.Start > spanAfterFormatting.End)
+                {
+                    // This span (and all following) are after the area we're interested in
+                    break;
+                }
+
                 // We don't care about this range. It didn't change.
                 continue;
             }
@@ -583,7 +571,7 @@ internal sealed class CSharpOnTypeFormattingPass(
 
         // First, collect all the locations at the beginning and end of each source mapping.
         var sourceMappingMap = new Dictionary<int, int>();
-        foreach (var mapping in csharpDocument.SourceMappings)
+        foreach (var mapping in csharpDocument.SourceMappingsSortedByOriginal)
         {
             var mappingSpan = new TextSpan(mapping.OriginalSpan.AbsoluteIndex, mapping.OriginalSpan.Length);
 #if DEBUG
@@ -665,10 +653,10 @@ internal sealed class CSharpOnTypeFormattingPass(
                 // itself that is mapped, the baseline indentation will be whatever happens to be the nearest C# mapping from outside the block
                 // which is not helpful. To solve this, we artificially introduce a mapping for the start of the section block, which points to
                 // the first C# mapping inside it.
-                if (((RazorDirectiveBodySyntax)containingDirective.Body).CSharpCode.Children is [.., MarkupBlockSyntax block, RazorMetaCodeSyntax /* close brace */])
+                if (containingDirective.DirectiveBody.CSharpCode.Children is [.., MarkupBlockSyntax block, RazorMetaCodeSyntax /* close brace */])
                 {
                     var blockSpan = block.Span;
-                    foreach (var mapping in csharpDocument.SourceMappings)
+                    foreach (var mapping in csharpDocument.SourceMappingsSortedByOriginal)
                     {
                         if (blockSpan.Contains(mapping.OriginalSpan.AbsoluteIndex))
                         {
@@ -676,6 +664,11 @@ internal sealed class CSharpOnTypeFormattingPass(
                             lineStartMap[blockSpan.Start] = projectedStartLocation;
                             sourceMappingMap[blockSpan.Start] = projectedStartLocation;
                             significantLocations.Add(projectedStartLocation);
+                            break;
+                        }
+                        else if (mapping.OriginalSpan.AbsoluteIndex > blockSpan.End)
+                        {
+                            // This span (and all following) are after the area we're interested in
                             break;
                         }
                     }
@@ -1048,7 +1041,7 @@ internal sealed class CSharpOnTypeFormattingPass(
             // `@using |System;
             //
             return owner.AncestorsAndSelf().Any(
-                n => n is RazorDirectiveSyntax { HasDirectiveDescriptor: false });
+                n => n is RazorUsingDirectiveSyntax or RazorDirectiveSyntax { HasDirectiveDescriptor: false });
         }
 
         bool IsAttributeDirective()
@@ -1153,22 +1146,24 @@ internal sealed class CSharpOnTypeFormattingPass(
 
     private static string RenderSourceMappings(RazorCodeDocument codeDocument)
     {
-        var markers = codeDocument.GetRequiredCSharpDocument().SourceMappings.SelectMany(mapping =>
-            new[]
-            {
-                (index: mapping.OriginalSpan.AbsoluteIndex, text: "<#" ),
-                (index: mapping.OriginalSpan.AbsoluteIndex + mapping.OriginalSpan.Length, text: "#>"),
-            })
-            .OrderByDescending(mapping => mapping.index)
-            .ThenBy(mapping => mapping.text);
+        using var pooledBuilder = StringBuilderPool.GetPooledObject();
+        var builder = pooledBuilder.Object;
 
-        var output = codeDocument.Source.Text.ToString();
-        foreach (var (index, text) in markers)
+        var documentText = codeDocument.Source.Text.ToString();
+        var lastIndex = 0;
+        foreach (var mapping in codeDocument.GetRequiredCSharpDocument().SourceMappingsSortedByOriginal)
         {
-            output = output.Insert(index, text);
+            builder.Append(documentText, lastIndex, mapping.OriginalSpan.AbsoluteIndex - lastIndex);
+            builder.Append("<#");
+            builder.Append(documentText, mapping.OriginalSpan.AbsoluteIndex, mapping.OriginalSpan.Length);
+            builder.Append("#>");
+
+            lastIndex = mapping.OriginalSpan.AbsoluteIndex + mapping.OriginalSpan.Length;
         }
 
-        return output;
+        builder.Append(documentText, lastIndex, documentText.Length - lastIndex);
+
+        return builder.ToString();
     }
 
     private record struct ShouldFormatOptions(bool AllowImplicitStatements, bool AllowImplicitExpressions, bool AllowSingleLineExplicitExpressions, bool IsLineRequest)

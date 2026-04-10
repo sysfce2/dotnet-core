@@ -1,10 +1,12 @@
-﻿Imports System.Windows.Forms.VisualBasic.Analyzers.MissingPropertySerializationConfiguration
+Imports System.Windows.Forms.VisualBasic.Analyzers.MissingPropertySerializationConfiguration
 Imports System.Windows.Forms.VisualBasic.CodeFixes.AddDesignerSerializationVisibility
 Imports Microsoft.CodeAnalysis
 Imports Microsoft.CodeAnalysis.Testing
 Imports Microsoft.CodeAnalysis.VisualBasic.Testing
 Imports Xunit
 
+<ForceGC()>
+<SkipOnArchitecture(TestArchitectures.X86, "Analyzer tests hit OutOfMemoryException on x86 due to memory-mapped NuGet package extraction")>
 Public Class ControlPropertySerializationDiagnosticAnalyzerTest
 
     Private Const ProblematicCode As String =

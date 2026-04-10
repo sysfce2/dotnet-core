@@ -4,7 +4,6 @@
 using System.ComponentModel;
 using System.Drawing;
 using System.Private.Windows.Graphics;
-using System.Runtime.InteropServices;
 using Windows.Win32.System.Com;
 using Windows.Win32.System.Ole;
 using Windows.Win32.UI.Shell;
@@ -21,9 +20,18 @@ namespace System.Private.Windows.Ole;
 ///  (via <see cref="IComVisibleDataObject"/>) currently.
 /// </devdoc>
 internal static unsafe class DragDropHelper<TOleServices, TDataFormat>
+#if NET
     where TOleServices : IOleServices
     where TDataFormat : IDataFormat<TDataFormat>
+#else
+    where TOleServices : IOleServices, new()
+    where TDataFormat : IDataFormat<TDataFormat>, new()
+#endif
 {
+#if NETFRAMEWORK
+    private static readonly TOleServices s_oleServices = new TOleServices();
+#endif
+
     /// <summary>
     ///  Sets the drop object image and accompanying text back to the default.
     /// </summary>
@@ -205,14 +213,14 @@ internal static unsafe class DragDropHelper<TOleServices, TDataFormat>
 
         if (medium.hGlobal.IsNull)
         {
-            throw new Win32Exception(Marshal.GetLastSystemError(), SR.ExternalException);
+            throw new Win32Exception(Marshal.GetLastWin32Error(), SR.ExternalException);
         }
 
         void* basePtr = PInvokeCore.GlobalLock(medium.hGlobal);
         if (basePtr is null)
         {
             PInvokeCore.GlobalFree(medium.hGlobal);
-            throw new Win32Exception(Marshal.GetLastSystemError(), SR.ExternalException);
+            throw new Win32Exception(Marshal.GetLastWin32Error(), SR.ExternalException);
         }
 
         *(BOOL*)basePtr = value;
@@ -363,14 +371,14 @@ internal static unsafe class DragDropHelper<TOleServices, TDataFormat>
 
         if (medium.hGlobal.IsNull)
         {
-            throw new Win32Exception(Marshal.GetLastSystemError(), SR.ExternalException);
+            throw new Win32Exception(Marshal.GetLastWin32Error(), SR.ExternalException);
         }
 
         void* basePtr = PInvokeCore.GlobalLock(medium.hGlobal);
         if (basePtr is null)
         {
             PInvokeCore.GlobalFree(medium.hGlobal);
-            throw new Win32Exception(Marshal.GetLastSystemError(), SR.ExternalException);
+            throw new Win32Exception(Marshal.GetLastWin32Error(), SR.ExternalException);
         }
 
         DROPDESCRIPTION* pDropDescription = (DROPDESCRIPTION*)basePtr;
@@ -442,7 +450,11 @@ internal static unsafe class DragDropHelper<TOleServices, TDataFormat>
     private static bool TryGetDragDropHelper<TDragHelper>(TDragHelper** dragDropHelper)
         where TDragHelper : unmanaged, IComIID
     {
+#if NET
         TOleServices.EnsureThreadState();
+#else
+        s_oleServices.EnsureThreadState();
+#endif
 
         HRESULT hr = PInvokeCore.CoCreateInstance(
             CLSID.DragDropHelper,

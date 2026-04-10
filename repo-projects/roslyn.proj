@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.Build.NoTargets">
 
   <PropertyGroup>
+    <DisallowDotNetFinalVersionKindOverride>true</DisallowDotNetFinalVersionKindOverride>
+
     <!-- Use the repo root build script -->
     <BuildScript>$(ProjectDirectory)build$(ShellExtension)</BuildScript>
 
@@ -33,10 +35,8 @@
     <RepositoryReference Include="runtime" />
     <RepositoryReference Include="source-build-reference-packages" />
     <RepositoryReference Include="symreader" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <SourceBuiltSdkOverride Include="@(WindowsDesktopSdkOverride)" Condition="'$(DotNetBuildSourceOnly)' == 'true'" />
+    <!-- For the Microsoft.Net.Sdk.WindowsDesktop which is used by roslyn in source-build. -->
+    <RepositoryReference Include="wpf" />
   </ItemGroup>
 
 </Project>

@@ -66,7 +66,7 @@ stages:
   jobs:
   - job: ValidateInstallers_Linux_x64
     pool: ${{ parameters.pool_Linux }}
-    timeoutInMinutes: 60
+    timeoutInMinutes: 120
     steps:
     - template: ../steps/vmr-validate-installers.yml
       parameters:
@@ -74,10 +74,10 @@ stages:
         OS: Linux
         reuseBuildArtifactsFrom:
         - Windows_x64
-        - AzureLinux_x64_Cross_x64
+        - Linux_x64
   - job: ValidateInstallers_Linux_arm64
     pool: ${{ parameters.pool_LinuxArm64 }}
-    timeoutInMinutes: 60
+    timeoutInMinutes: 120
     steps:
     - template: ../steps/vmr-validate-installers.yml
       parameters:
@@ -85,7 +85,7 @@ stages:
         OS: Linux
         reuseBuildArtifactsFrom:
         - Windows_x64
-        - AzureLinux_x64_Cross_arm64
+        - Linux_arm64
   - ${{ if eq(variables.signType, 'real') }}:
     - job: ValidateSigning_Windows
       displayName: Validate Signing - Windows
@@ -110,6 +110,7 @@ stages:
     - job: ValidateSigning_Linux
       displayName: Validate Signing - Linux
       pool: ${{ parameters.pool_Linux }}
+      container: ${{ variables.azurelinuxBuildContainerName }}
       timeoutInMinutes: 240
       steps:
       - template: ../steps/vmr-validate-signing.yml

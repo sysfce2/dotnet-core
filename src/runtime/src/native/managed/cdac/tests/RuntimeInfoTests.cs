@@ -13,13 +13,18 @@ public class RuntimeInfoTests
 {
     internal static Target CreateTarget(
         MockTarget.Architecture arch,
-        (string Name, string Value)[] globalStrings)
+        (string Name, string Value)[] globalStrings,
+        (string Name, ulong Value)[]? globals = null)
     {
-        MockMemorySpace.Builder builder = new MockMemorySpace.Builder(new TargetTestHelpers(arch));
-        TestPlaceholderTarget target = new TestPlaceholderTarget(arch, builder.GetMemoryContext().ReadFromTarget, [], [], globalStrings);
+        MockMemorySpace.Builder builder = new(new TargetTestHelpers(arch));
+        TestPlaceholderTarget target = new(
+            arch,
+            builder.GetMemoryContext().ReadFromTarget,
+            [],
+            globals,
+            globalStrings);
 
         IContractFactory<IRuntimeInfo> runtimeInfoFactory = new RuntimeInfoFactory();
-
         ContractRegistry reg = Mock.Of<ContractRegistry>(
             c => c.RuntimeInfo == runtimeInfoFactory.CreateContract(target, 1));
         target.SetContracts(reg);
@@ -52,13 +57,9 @@ public class RuntimeInfoTests
         string architecture,
         RuntimeInfoArchitecture expectedArchitecture)
     {
-        var target = CreateTarget(arch, [(Constants.Globals.Architecture, architecture)]);
+        Target target = CreateTarget(arch, [(Constants.Globals.Architecture, architecture)]);
 
-        // TEST
-
-        var runtimeInfo = target.Contracts.RuntimeInfo;
-        Assert.NotNull(runtimeInfo);
-
+        IRuntimeInfo runtimeInfo = target.Contracts.RuntimeInfo;
         var actualArchitecture = runtimeInfo.GetTargetArchitecture();
         Assert.Equal(expectedArchitecture, actualArchitecture);
     }
@@ -89,14 +90,29 @@ public class RuntimeInfoTests
         string os,
         RuntimeInfoOperatingSystem expectedOS)
     {
-        var target = CreateTarget(arch, [(Constants.Globals.OperatingSystem, os)]);
+        Target target = CreateTarget(arch, [(Constants.Globals.OperatingSystem, os)]);
 
-        // TEST
-
-        var runtimeInfo = target.Contracts.RuntimeInfo;
-        Assert.NotNull(runtimeInfo);
-
+        IRuntimeInfo runtimeInfo = target.Contracts.RuntimeInfo;
         var actualArchitecture = runtimeInfo.GetTargetOperatingSystem();
         Assert.Equal(expectedOS, actualArchitecture);
+    }
+
+    private static readonly MockTarget.Architecture DefaultArch = new MockTarget.Architecture { IsLittleEndian = true, Is64Bit = true };
+
+    [Fact]
+    public void RecommendedReaderVersion_GlobalPresent_ReturnsValue()
+    {
+        Target target = CreateTarget(
+            DefaultArch,
+            [],
+            [(Constants.Globals.RecommendedReaderVersion, (ulong)2)]);
+        Assert.Equal((uint)2, target.Contracts.RuntimeInfo.GetRecommendedReaderVersion());
+    }
+
+    [Fact]
+    public void RecommendedReaderVersion_GlobalAbsent_ReturnsZero()
+    {
+        Target target = CreateTarget(DefaultArch, []);
+        Assert.Equal((uint)0, target.Contracts.RuntimeInfo.GetRecommendedReaderVersion());
     }
 }

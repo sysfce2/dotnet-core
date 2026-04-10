@@ -10,6 +10,8 @@ internal abstract partial class BaseMarkupStartTagSyntax
 {
     private SyntaxNode? _lazyChildren;
 
+    public BaseMarkupElementSyntax ParentElement => (BaseMarkupElementSyntax)Parent;
+
     public SyntaxList<RazorSyntaxNode> LegacyChildren
     {
         get
@@ -19,6 +21,11 @@ internal abstract partial class BaseMarkupStartTagSyntax
 
             return new SyntaxList<RazorSyntaxNode>(children);
         }
+    }
+
+    public bool IsVoidElement()
+    {
+        return ParserHelpers.VoidElements.Contains(Name.Content);
     }
 
     public bool IsSelfClosing()
@@ -125,5 +132,6 @@ internal abstract partial class BaseMarkupStartTagSyntax
         }
     }
 
-    public abstract BaseMarkupEndTagSyntax? GetEndTag();
+    public BaseMarkupEndTagSyntax? GetEndTag()
+        => (Parent as BaseMarkupElementSyntax)?.EndTag;
 }

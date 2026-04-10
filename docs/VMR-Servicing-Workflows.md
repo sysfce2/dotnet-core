@@ -6,12 +6,12 @@ Terminology for the info below:
 - **Current Month** – The month being built, but not yet released.
 - **Current+1 Month** – The next release after the current month.
 - **Current+2 Month** – The next release after the current+1 month.
-- **Release Specific** – Refers to a specific release, rather than an overall release train (e.g. `release/10.0.101`).
+- **Release Specific** – Refers to a specific release, rather than an overall release train (e.g. `internal/release/10.0.101`).
 - **General Servicing** – Refers to an overall servicing train (e.g. `release/10.0.1xx`).
 
 ## Branch the VMR for each release
 
-Utilizes a **continuously** open servicing branch. A new VMR **Release Specific** branch is created off of this branch for each actual release (e.g. `release/10.0.101` and `release/10.0.200`) with additional temporary validation branches. These **Release Specific** branches may receive late-breaking fixes without endangering a future release.
+Utilizes a **continuously** open servicing branch. A new VMR **Release Specific** branch is created off of this branch for each actual release (e.g. `internal/release/10.0.101` and `internal/release/10.0.200`) with additional temporary validation branches. These **Release Specific** branches may receive late-breaking fixes without endangering a future release.
 
 ### TL;DR
 
@@ -25,28 +25,26 @@ Utilizes a **continuously** open servicing branch. A new VMR **Release Specific*
 
 - Tactics approves bugs continuously. These bugs are approved for a specific release (milestone). The target release may change (e.g., delayed to align with another product). Changes are **immediately** checked into the branch that matches the milestone, if it exists. This target shifts depending on where we are in the month.
 - On a specified day after the **Current Month** content is code complete (validation may not yet be complete), **Release Specific** VMR and validation branches are created:
-  - Public **Release Specific** VMR: `release/10.0.Nxx` -> `release/10.0.NOM` (off HEAD)
   - Internal **Release Specific** VMR: `internal/release/10.0.Nxx` -> `internal/release/10.0.NOM` (off HEAD)
   - Internal **Release Specific** VMR validation branches: `validation/release/10.0.N[0M]` off the last forward-flow SHAs.
 - **Current Month** changes then move to being checked into the following locations:
-  - Public **Release Specific** VMR branches (`release/10.0.NOM`) – for public VMR fixes.
-  - Internal **Release Specific** VMR branches (`internal/release/10.0.NOM`) – for internal fixes.
+  - Internal **Release Specific** VMR branches (`internal/release/10.0.NOM`) – for all VMR fixes.
 - The Public VMR branches are rebranded for **Current+1 Month**.
 - After rebranding for **Current+1 Month** and until the next branch point, **General Servicing** branches are open for **Current+1 Month** changes. While the **General Servicing** VMR branch represents **Current+1 Month**, changes for **Current+1 Month** may be checked into the following locations:
   - Public **General Servicing** component repository branches (e.g., SDK @ `release/10.0.1xx`, runtime @ `release/10.0`) – flows to public VMR (`release/10.0.Nxx`) via forward flow.
   - Public **General Servicing** VMR branches (`release/10.0.Nxx`) – for public VMR fixes.
   - Internal **General Servicing** VMR branches (`internal/release/10.0.Nxx`) – for internal fixes.
-- Changes in public VMR branches automatically merge into internal VMR branches (`release/10.0.Nxx` -> `internal/release/10.0.Nxx`, `release/10.0.NOM` -> `internal/release/10.0.NOM`). This happens continuously for both **Release Specific** and **General Servicing**.
+- Changes in public **General Servicing** VMR branches automatically merge into internal **General Servicing** VMR branches (`release/10.0.Nxx` -> `internal/release/10.0.Nxx`). This happens continuously for **General Servicing** branches.
 - Automated validation for changes is provided in the following ways:
   - **General Servicing** – Public forward flows from component repositories receive validation on the public PRs to those repositories (e.g., `my-fix-12345` validated before merging to runtime @ `release/10.0`).
-  - **General Servicing** and **Release Specific** – Public VMR-targeted changes are validated before merge via VMR PR pipelines and scenario testing.
+  - **General Servicing** – Public VMR-targeted changes are validated before merge via VMR PR pipelines and scenario testing.
   - **General Servicing** and **Release Specific** – Internal VMR-targeted changes are validated before merge via VMR PR pipelines and scenario testing.
   - **General Servicing** and **Release Specific** – Internal component repository changes may be validated before cherry-picking into the VMR via PRs against internal validation branches (e.g., runtime @ `validation/release/10.0`, SDK @ `validation/release/10.0.202`). These changes may be merged into the validation branch but do not flow further.
   - **General Servicing** – Public VMR builds of servicing branches backflow to the public **General Servicing** component repository branches (e.g., builds of the VMR applying to channel .NET 10.0.1xx SDK backflow to runtime @ `release/10.0` and SDK @ `release/10.0.1xx`). PR validation occurs on those backflows. This covers VMR-only changes and validates component repository sources against the latest built dependency packages.
   - **General Servicing** and **Release Specific** – Internal VMR builds of servicing branches backflow to internal component repository validation branches (e.g., runtime @ `validation/release/10.0` and runtime @ `validation/release/10.0.2`).
 - On the release day for the **Current Month**:
   - The product is released.
-  - The VMR release tag is merged back into the public **General Servicing** and **Release Specific** VMR release branches (e.g., `v10.0.101` -> `release/10.0.1xx`, `v10.0.200` -> `release/10.0.2xx`, `v10.0.101` -> `release/10.0.102`, `v10.0.200` -> `release/10.0.201`).
+  - The VMR release tag is merged back into the public **General Servicing** VMR release branches and the internal **Release Specific** VMR release branches (e.g., `v10.0.101` -> `release/10.0.1xx`, `v10.0.200` -> `release/10.0.2xx`, `v10.0.101` -> `internal/release/10.0.102`, `v10.0.200` -> `internal/release/10.0.201`).
   - The VMR bootstrap SDK is updated (the version of the SDK used to build the VMR) in the **General Servicing** branch.
   - Arcade gets the new bootstrap SDK version, which then flows to component repositories.
 - Approved changes that do not meet the bar for **Current+1 Month** are marked with the **Current+2 Month** milestone.
@@ -83,17 +81,17 @@ gantt
   GS April Development                          :gs_apr_dev, 2026-02-24, 29d
   GS-Merge From Mar Release Tag                        :milestone, 2026-03-10, 0d
 
-  section RS-Feb (release/10.0.103)
+  section RS-Feb (internal/release/10.0.103)
   RS-Feb Stabilization / Late Fixes                    :rs_feb_stab, 2026-01-20, 7d
-  RS-Feb Validation                            :rs_feb_build, 2026-01-27, 5d
-  RS-Feb Staging / Release                             :rs_feb_build, 2026-02-01, 9d
+  RS-Feb Validation                            :rs_feb_validation, 2026-01-27, 5d
+  RS-Feb Staging / Release                             :rs_feb_staging, 2026-02-01, 9d
   RS-Feb Release                                        :milestone, 2026-02-10, 0d
 
 
-  section RS-Mar (release/10.0.104)
+  section RS-Mar (internal/release/10.0.104)
   RS-Mar Stabilization Phase / Late Fixes               :rs_mar_stab, 2026-02-24, 3d
   RS-Mar Validation                                     :rs_mar_build2, 2026-02-27, 3d
-  RS-Mar Staging / Release                              :rs_feb_build, 2026-03-01, 9d
+  RS-Mar Staging / Release                              :rs_mar_staging, 2026-03-01, 9d
   RS-Mar Release                                       :milestone, 2026-03-10, 0d
 ```
 #### Notes on schedule
@@ -108,7 +106,7 @@ gantt
 2. Developer prepares an approval template and brings the fix to Tactics.
 3. Tactics approves the bug for a specific release (e.g. 10.0.3 or 10.0.4)
 4. Developer merges the fix based on the current branch status and schedule, choosing the appropriate place to check in:
-    - If the approved milestone corresponds to the **Release Specific** branch, then the PR is targeted to the public VMR **Release Specific** branch and merged.
+    - If the approved milestone corresponds to the **Release Specific** branch, then the PR is targeted to the internal VMR **Release Specific** branch and merged.
     - If the approved milestone corresponds to the current state of the **General Servicing** branch (the branch is branded for that milestone), then the PR is targeted to the public VMR **General Servicing** branch, or the component repository **General Servicing** branch and merged.
     - If the approved milestone does not correspond to any currently open branch, the fix is parked until a **General Servicing** VMR/component repo branch matches the milestone, and then the fix is merged.
 5. Confirm that the fix flowed into the VMR servicing branch matching the approved milestone.
@@ -183,7 +181,7 @@ When a fix is made directly to a **Release Specific** branch, that fix will make
 - The **General Servicing** branch not having a fix required for release available in daily validation.
 - Current infrastructure issues in the **General Servicing** branch resolved by the fix.
 
-It is recommended, though not required, that fixes made directly to the **Release Specific** VMR branch be merged back into the appropriate **General Servicing** branch (public->public, internal->internal).
+It is recommended, though not required, that fixes made directly to the **Release Specific** VMR branch be explicitly merged back into the corresponding internal **General Servicing** branch and, when applicable, into the corresponding public **General Servicing** branches.
 
 ### Special Considerations - OOB Releases
 
@@ -203,7 +201,7 @@ There are times when an OOB release is required. These are releases that contain
     - Ancillary changes (e.g., implicit versions).
 - Based on the release base and content, the coherency QB chooses a branch point. This is *usually*, but not always, the previous (or soon-to-be-released) VMR SHA.
 - The coherency QB performs the branching and branding process (roughly equivalent to the monthly branching process), possibly with an additional step to move in-process release branding forward.
-  - Rebrand and rename any active **Release Specific** branches that need to change based on the introduction of a new release. For example, if an SDK-only OOB for 10.0.102 is to be released and `release/10.0.102` already exists, that branch is rebranded and then renamed to `release/10.0.103`. Typically, versions increase by 1 to leave space. The original `release/10.0.102` is deleted (it will be recreated with new content).
+  - Rebrand and rename any active **Release Specific** branches that need to change based on the introduction of a new release. For example, if an SDK-only OOB for 10.0.102 is to be released and `internal/release/10.0.102` already exists, that branch is rebranded and then renamed to `internal/release/10.0.103`. Typically, versions increase by 1 to leave space. The original `internal/release/10.0.102` is deleted (it will be recreated with new content).
   - Rebrand any active **General Release** branches that need updating (typically increment the patch version by 1).
   - Use the `NETMechanic` tool to create a new **Release Specific** VMR branch with associated validation branches from the desired VMR base sha.
   - As necessary, update **Release Specific** branch(es) to match desired release scope. (E.g., for an SDK-only 1xx release, disable the runtime build.)

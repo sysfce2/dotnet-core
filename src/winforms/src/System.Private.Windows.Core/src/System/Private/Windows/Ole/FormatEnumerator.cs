@@ -1,16 +1,20 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.CompilerServices;
 using Windows.Win32.System.Com;
 using ComTypes = System.Runtime.InteropServices.ComTypes;
 
 namespace System.Private.Windows.Ole;
 
+#if NET
+// Workaround SA1001 white space warnings.
+internal sealed partial class FormatEnumerator : IManagedWrapper<IEnumFORMATETC> { }
+#endif
+
 /// <summary>
 ///  Part of IComDataObject, used to interop with OLE.
 /// </summary>
-internal unsafe class FormatEnumerator : ComTypes.IEnumFORMATETC, IEnumFORMATETC.Interface, IManagedWrapper<IEnumFORMATETC>
+internal sealed unsafe partial class FormatEnumerator : ComTypes.IEnumFORMATETC, IEnumFORMATETC.Interface
 {
     // Want to keep a reference to the data object to ensure it's not collected.
     private readonly IDataObjectInternal _dataObject;
@@ -41,7 +45,7 @@ internal unsafe class FormatEnumerator : ComTypes.IEnumFORMATETC, IEnumFORMATETC
             {
                 cfFormat = (short)(ushort)getFormatId(format),
                 dwAspect = ComTypes.DVASPECT.DVASPECT_CONTENT,
-                ptd = 0,
+                ptd = (nint)0,
                 lindex = -1,
                 tymed = format == DataFormatNames.Bitmap
                     ? ComTypes.TYMED.TYMED_GDI
@@ -67,7 +71,7 @@ internal unsafe class FormatEnumerator : ComTypes.IEnumFORMATETC, IEnumFORMATETC
             cfFormat = current.cfFormat,
             tymed = current.tymed,
             dwAspect = ComTypes.DVASPECT.DVASPECT_CONTENT,
-            ptd = 0,
+            ptd = (nint)0,
             lindex = -1
         };
 

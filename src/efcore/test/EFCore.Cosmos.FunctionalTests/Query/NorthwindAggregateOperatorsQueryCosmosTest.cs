@@ -5,6 +5,7 @@ using System.Net;
 using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore.Cosmos.Internal;
 using Microsoft.EntityFrameworkCore.TestModels.Northwind;
+using Microsoft.EntityFrameworkCore.TestUtilities.Xunit;
 
 namespace Microsoft.EntityFrameworkCore.Query;
 
@@ -675,6 +676,7 @@ OFFSET 0 LIMIT 1
         }
     }
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override async Task MaxBy_no_data_nullable_source(bool async)
     {
         // Always throws for sync.
@@ -759,6 +761,7 @@ OFFSET 0 LIMIT 1
 """);
             });
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override async Task MaxBy_with_coalesce(bool async)
     {
         // Always throws for sync.
@@ -843,6 +846,7 @@ OFFSET 0 LIMIT 1
         }
     }
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override async Task MinBy_no_data_nullable_source(bool async)
     {
         // Always throws for sync.
@@ -911,6 +915,7 @@ OFFSET 0 LIMIT 1
         AssertSql();
     }
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override async Task MinBy_with_coalesce(bool async)
     {
         // Always throws for sync.
@@ -1417,6 +1422,7 @@ WHERE (((c["$type"] = "Order") AND (c["OrderID"] > 10)) AND (c["CustomerID"] != 
         AssertSql();
     }
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override async Task OrderBy_client_Take(bool async)
     {
         // Always throws for sync.
@@ -1449,7 +1455,7 @@ FROM root c
 """);
             });
 
-    [ConditionalTheory(Skip = "Fails on CI #27688")]
+    [SkipOnCiCondition(SkipReason = "Fails on CI #27688")]
     public override Task Distinct_Scalar(bool async)
         => Fixture.NoSyncTest(
             async, async a =>
@@ -1458,9 +1464,8 @@ FROM root c
 
                 AssertSql(
                     """
-SELECT DISTINCT c[""City""]
+SELECT DISTINCT VALUE c["City"]
 FROM root c
-WHERE (c[""$type""] = ""Customer"")
 """);
             });
 
@@ -2267,6 +2272,7 @@ WHERE NOT(false)
 """);
             });
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override async Task Contains_top_level(bool async)
     {
         // Always throws for sync.
@@ -2519,6 +2525,7 @@ WHERE ARRAY_CONTAINS(@ids, c["id"])
 """);
             });
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override async Task Contains_over_entityType_with_null_should_rewrite_to_false(bool async)
     {
         // Always throws for sync.
@@ -2622,6 +2629,7 @@ WHERE ARRAY_CONTAINS(@ids, c["id"])
 """);
             });
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override Task Where_subquery_where_any(bool async)
         => Fixture.NoSyncTest(
             async, async a =>
@@ -2692,6 +2700,7 @@ WHERE NOT(ARRAY_CONTAINS(@ids, c["id"]))
 """);
             });
 
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public override Task Where_subquery_where_all(bool async)
         => Fixture.NoSyncTest(
             async, async a =>

@@ -31,14 +31,17 @@
     <CommonArgs>$(CommonArgs) /p:PortableTargetRid=$(PortableTargetRid)</CommonArgs>
     <CommonArgs Condition="'$(DefaultArtifactVisibility)' != ''">$(CommonArgs) /p:DefaultArtifactVisibility=$(DefaultArtifactVisibility)</CommonArgs>
 
+    <!-- Suppress NU1510 warning-as-error during offline build, these will be fixed on rebootstrap -->
+    <CommonArgs Condition="'$(DotNetBuildWithOnlineFeeds)' != 'true'">$(CommonArgs) $(FlagParameterPrefix)warnNotAsError NU1510</CommonArgs>
+
     <!-- Branding -->
     <RepoDotNetFinalVersionKindArg Condition="'$(RepoDotNetFinalVersionKind)' == 'repodefault' or '$(RepoDotNetFinalVersionKind)' == ''"></RepoDotNetFinalVersionKindArg>
     <RepoDotNetFinalVersionKindArg Condition="'$(RepoDotNetFinalVersionKind)' == 'unstable'">/p:DotNetFinalVersionKind=""</RepoDotNetFinalVersionKindArg>
     <RepoDotNetFinalVersionKindArg Condition="'$(RepoDotNetFinalVersionKind)' == 'preview'">/p:DotNetFinalVersionKind=prerelease</RepoDotNetFinalVersionKindArg>
     <RepoDotNetFinalVersionKindArg Condition="'$(RepoDotNetFinalVersionKind)' == 'release'">/p:DotNetFinalVersionKind=release</RepoDotNetFinalVersionKindArg>
-    <CommonArgs Condition="'$(AllowDotNetFinalVersionKindOverride)' == 'true'">$(CommonArgs) $(RepoDotNetFinalVersionKindArg)</CommonArgs>
+    <CommonArgs Condition="'$(DisallowDotNetFinalVersionKindOverride)' != 'true'">$(CommonArgs) $(RepoDotNetFinalVersionKindArg)</CommonArgs>
 
-    <!-- Only pass these properites through when necessary to reduce command line noise. -->
+    <!-- Only pass these properties through when necessary to reduce command line noise. -->
     <CommonArgs Condition="'$(DotNetBuildTests)' == 'true' and '$(DotNetBuildTestsOptOut)' != 'true'">$(CommonArgs) /p:DotNetBuildTests=true</CommonArgs>
 
     <BuildArgs Condition="'$(EnableDefaultRidSpecificArtifacts)' != ''">$(BuildArgs) /p:EnableDefaultRidSpecificArtifacts=$(EnableDefaultRidSpecificArtifacts)</BuildArgs>
@@ -154,6 +157,7 @@
 
   <UsingTask TaskName="Microsoft.DotNet.UnifiedBuild.Tasks.AddSourceToNuGetConfig" AssemblyFile="$(MicrosoftDotNetUnifiedBuildTasksAssembly)" TaskFactory="TaskHostFactory" />
   <UsingTask TaskName="Microsoft.DotNet.UnifiedBuild.Tasks.RemoveInternetSourcesFromNuGetConfig" AssemblyFile="$(MicrosoftDotNetUnifiedBuildTasksAssembly)" TaskFactory="TaskHostFactory" />
+  <UsingTask TaskName="Microsoft.DotNet.UnifiedBuild.Tasks.RemoveBlockedAuditSourcesFromNuGetConfig" AssemblyFile="$(MicrosoftDotNetUnifiedBuildTasksAssembly)" TaskFactory="TaskHostFactory" />
   <UsingTask TaskName="Microsoft.DotNet.UnifiedBuild.Tasks.UpdateNuGetConfigPackageSourcesMappings" AssemblyFile="$(MicrosoftDotNetUnifiedBuildTasksAssembly)" TaskFactory="TaskHostFactory" />
   <Target Name="UpdateNuGetConfig"
           DependsOnTargets="ResolveProjectReferences;GetRepositoryReferenceInfo"
@@ -190,27 +194,15 @@
       <_CommonBuildSources Include="$(ExtraTestDependenciesNuGetSourceName)" Condition="Exists('$(ExtraTestDependenciesRestoreSourcePath)')" />
     </ItemGroup>
 
-    <PropertyGroup Condition="'$(DotNetBuildSourceOnly)' != 'true'">
-      <!-- When not building source-only, repositories lagging behind on the .NET SDK (e.g. tooling repos)
-          that need to utilize a VS-aligned version for development purposes may not have the latest product
-          daily build feed in their NuGet.config. This means that when a newer globally-specified .NET SDK
-          attempts to restore shared framework packages, they will not be found. Work around this by
-          ensuring that repos have the supporting SDK feed. Note that this is not required when the SDK
-          in use is a released SDK.
-
-          Currently we are using a preview .NET 9 SDK and not all repos are using the Net 9 SDK
-          If either of these are not true, set below to false.
-      -->
-      <AddNetSdkSupportingFeed>true</AddNetSdkSupportingFeed>
-      <NetSdkSupportingFeedName>net-sdk-supporting-feed</NetSdkSupportingFeedName>
-      <NetSdkSupportingFeed>https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10/nuget/v3/index.json</NetSdkSupportingFeed>
-    </PropertyGroup>
-
     <RemoveInternetSourcesFromNuGetConfig
       NuGetConfigFile="$(NuGetConfigFile)"
       BuildWithOnlineFeeds="$(DotNetBuildWithOnlineFeeds)"
       KeepFeedPrefixes="@(KeepFeedPrefixes)"
       Condition="'$(DotNetBuildSourceOnly)' == 'true'" />
+
+    <RemoveBlockedAuditSourcesFromNuGetConfig
+      NuGetConfigFile="$(NuGetConfigFile)"
+      Condition="'$(RemoveBlockedAuditSources)' == 'true'" />
 
     <AddSourceToNuGetConfig NuGetConfigFile="$(NuGetConfigFile)"
                             SourceName="$(PrebuiltNuGetSourceName)"
@@ -252,12 +244,6 @@
                             SourcePath="$(ExtraTestDependenciesRestoreSourcePath)"
                             Condition="Exists('$(ExtraTestDependenciesRestoreSourcePath)')" />
 
-    <!-- See root Directory.Build.props for value. -->
-    <AddSourceToNuGetConfig NuGetConfigFile="$(NuGetConfigFile)"
-                            SourceName="$(NetSdkSupportingFeedName)"
-                            SourcePath="$(NetSdkSupportingFeed)"
-                            Condition="'$(AddNetSdkSupportingFeed)' == 'true'" />
-
     <ItemGroup>
       <_BuildSources Include="$(PrebuiltNuGetSourceName);
                               $(PreviouslySourceBuiltNuGetSourceName);
@@ -265,8 +251,6 @@
                               $(ReferencePackagesNuGetSourceName)"
                      Condition="'$(AddPrebuiltFeeds)' == 'true'"/>
       <_BuildSources Include="@(_CommonBuildSources)" />
-      <_BuildSources Include="$(NetSdkSupportingFeedName)"
-                     Condition="'$(AddNetSdkSupportingFeed)' == 'true'" />
     </ItemGroup>
 
     <UpdateNuGetConfigPackageSourcesMappings
@@ -281,19 +265,18 @@
       PrebuiltSourceName="$(PrebuiltNuGetSourceName)"
       SourceBuiltSourceNamePrefix="$(SourceBuiltSourceNamePrefix)"
       PreviousBuildPassSourceNamePrefix="$(PreviousBuildPassSourceNamePrefix)"
-      CustomSources="$(NetSdkSupportingFeedName)"
       Condition="'$(DotNetSourceOnlyTestOnly)' != 'true'" />
-
-    <MakeDir Directories="$(BaseIntermediateOutputPath)" />
-    <Touch Files="$(BaseIntermediateOutputPath)UpdateNuGetConfig.complete" AlwaysCreate="true">
-      <Output TaskParameter="TouchedFiles" ItemName="FileWrites" />
-    </Touch>
 
     <ItemGroup>
       <!-- This is defined in this target to ensure the NuGet.config file is updated before it gets embedded. If this item
            was define globally, it would immediately get embedded with the original, unmodified version of the file. -->
       <EmbedInBinlog Include="$(NuGetConfigFile)" />
     </ItemGroup>
+
+    <MakeDir Directories="$(BaseIntermediateOutputPath)" />
+    <Touch Files="$(BaseIntermediateOutputPath)UpdateNuGetConfig.complete" AlwaysCreate="true">
+      <Output TaskParameter="TouchedFiles" ItemName="FileWrites" />
+    </Touch>
   </Target>
 
   <!-- Update the SDK version in the repo's global.json file.
@@ -301,7 +284,7 @@
   <UsingTask TaskName="Microsoft.DotNet.UnifiedBuild.Tasks.UpdateJson" AssemblyFile="$(MicrosoftDotNetUnifiedBuildTasksAssembly)" TaskFactory="TaskHostFactory" />
   <Target Name="UpdateGlobalJsonVersions"
           Condition="'$(GlobalJsonFile)' != ''"
-          DependsOnTargets="ResolveProjectReferences"
+          DependsOnTargets="ResolveProjectReferences;DiscoverBuiltSdkOverrides"
           Inputs="$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)"
           Outputs="$(BaseIntermediateOutputPath)UpdateGlobalJsonVersions.complete">
     <ItemGroup>
@@ -318,6 +301,28 @@
     <UpdateJson JsonFilePath="$(GlobalJsonFile)"
                 PathToAttribute="tools:runtimes"
                 SkipUpdateIfMissingKey="true" />
+
+    <!-- Update bootstrap Arcade SDK version -->
+    <UpdateJson JsonFilePath="$(GlobalJsonFile)"
+                PathToAttribute="msbuild-sdks:Microsoft.DotNet.Arcade.Sdk"
+                NewAttributeValue="$(ArcadeBootstrapVersion)"
+                Condition="'$(UseBootstrapArcade)' == 'true'" />
+
+    <ItemGroup Condition="'@(SourceBuiltSdkOverride)' != ''">
+      <_SourceBuiltSdkOverrideWithValue Include="@(SourceBuiltSdkOverride)" Value="%(Version)" />
+    </ItemGroup>
+
+    <!-- Update msbuild-sdks entries -->
+    <UpdateJson JsonFilePath="$(GlobalJsonFile)"
+                PathToAttribute="msbuild-sdks"
+                ValuesToUpdate="@(_SourceBuiltSdkOverrideWithValue)"
+                Condition="'@(_SourceBuiltSdkOverrideWithValue)' != ''" />
+
+    <ItemGroup>
+      <!-- This is defined in this target to ensure the NuGet.config file is updated before it gets embedded. If this item
+           was define globally, it would immediately get embedded with the original, unmodified version of the file. -->
+      <EmbedInBinlog Include="$(GlobalJsonFile)" />
+    </ItemGroup>
 
     <MakeDir Directories="$(BaseIntermediateOutputPath)" />
     <Touch Files="$(BaseIntermediateOutputPath)UpdateGlobalJsonVersions.complete" AlwaysCreate="true">
@@ -504,6 +509,7 @@
       <SourceBuiltSdkOverride Include="@(_DependencyProducedPackage->WithMetadataValue('Identity', 'Microsoft.DotNet.SharedFramework.Sdk'))" Group="ARCADE_SHARED_FX_SDK" />
       <SourceBuiltSdkOverride Include="@(_DependencyProducedPackage->WithMetadataValue('Identity', 'Microsoft.DotNet.CMake.Sdk'))" Group="ARCADE_CMAKE_SDK" />
     </ItemGroup>
+
     <!--
       Add Microsoft.Build.NoTargets and Microsoft.Build.Traversal SDK overrides, for all repos that have it built (ie. excluding SBRP as it builds the SDKs).
 
@@ -516,6 +522,11 @@
     <ItemGroup>
       <SourceBuiltSdkOverride Include="@(_DependencyProducedPackage->WithMetadataValue('Identity', 'Microsoft.Build.Traversal'))" Group="TRAVERSAL" />
       <SourceBuiltSdkOverride Include="@(_DependencyProducedPackage->WithMetadataValue('Identity', 'Microsoft.Build.NoTargets'))" Group="NOTARGETS" />
+    </ItemGroup>
+
+    <!-- WindowsDesktop SDK. -->
+    <ItemGroup>
+      <SourceBuiltSdkOverride Include="@(_DependencyProducedPackage->WithMetadataValue('Identity', 'Microsoft.Net.Sdk.WindowsDesktop'))" Group="WINDOWS_DESKTOP" />
     </ItemGroup>
   </Target>
 
@@ -550,16 +561,16 @@
   </Target>
 
   <Target Name="SetBuildProperties"
-          DependsOnTargets="PrepareRepositoryReferences;SetRepoOriginalSourceRevisionId">
-    <!-- Make everything that depends on live runtime target current pack versions to avoid assembly version mismatches with the LKG SDK that uses 10.0.0.0 versions when targeting net11.0.
-         Experimental, therefore commented out. -->
+          DependsOnTargets="PrepareRepositoryReferences;SetRepoOriginalSourceRevisionId;GetProducedPackagesFromTransitiveReferences">
+    <!-- Make everything that depends on live runtime repo uses the live targeting pack to avoid a mismatch between the API/version packages expect to be in framework and what the actual targeting pack provides. -->
     <PropertyGroup Condition="'$(DotNetBuildSourceOnly)' == 'true' and '@(TransitiveRepositoryReference->AnyHaveMetadataValue('Identity', 'runtime'))' == 'true'">
+      <!-- Use the targeting pack version as a shortcut for other pack versions since they all version consistently -->
       <RuntimePackVersion>@(_DependencyProducedPackage->WithMetadataValue('Identity', 'Microsoft.NETCore.App.Ref')->Metadata('Version'))</RuntimePackVersion>
-      <!-- <BuildArgs>$(BuildArgs) /p:KnownFrameworkReferenceMicrosoftNETCoreAppCurrentTargetingPackVersion=$(RuntimePackVersion)</BuildArgs>
+      <BuildArgs>$(BuildArgs) /p:KnownFrameworkReferenceMicrosoftNETCoreAppCurrentTargetingPackVersion=$(RuntimePackVersion)</BuildArgs>
       <BuildArgs>$(BuildArgs) /p:KnownFrameworkReferenceMicrosoftNETCoreAppCurrentDefaultRuntimeFrameworkVersion=$(RuntimePackVersion)</BuildArgs>
       <BuildArgs>$(BuildArgs) /p:KnownFrameworkReferenceMicrosoftNETCoreAppCurrentLatestRuntimeFrameworkVersion=$(RuntimePackVersion)</BuildArgs>
       <BuildArgs>$(BuildArgs) /p:KnownRuntimePackMicrosoftNETCoreAppCurrentMonoLatestRuntimeFrameworkVersion=$(RuntimePackVersion)</BuildArgs>
-      <BuildArgs>$(BuildArgs) /p:KnownRuntimePackMicrosoftNETCoreAppCurrentNativeAOTLatestRuntimeFrameworkVersion=$(RuntimePackVersion)</BuildArgs> -->
+      <BuildArgs>$(BuildArgs) /p:KnownRuntimePackMicrosoftNETCoreAppCurrentNativeAOTLatestRuntimeFrameworkVersion=$(RuntimePackVersion)</BuildArgs>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -580,10 +591,10 @@
           Condition="'$(BuildCommand)' != ''"
           DependsOnTargets="ExtractToolPackagesForSkippedRepos;
                             UpdateNuGetConfig;
+                            DiscoverBuiltSdkOverrides;
                             UpdateGlobalJsonVersions;
                             UpdateEngCommonFiles;
                             CreateBuildInputProps;
-                            DiscoverBuiltSdkOverrides;
                             SetSourceBuiltSdkOverrides;
                             SetBuildProperties">
     <Message Importance="High" Text="[$([System.DateTime]::Now.ToString('HH:mm:ss.ff'))] Building $(RepositoryName)" />
@@ -898,7 +909,8 @@
     CleanupRepo" />
 
   <Target Name="RepoTest"
-          DependsOnTargets="DiscoverBuiltSdkOverrides;
+          DependsOnTargets="ResolveProjectReferences;
+                            DiscoverBuiltSdkOverrides;
                             SetSourceBuiltSdkOverrides">
     <PropertyGroup>
       <TestCommand>$(BuildScript) $(TestActions) $(CommonArgs) $(TestArgs)</TestCommand>

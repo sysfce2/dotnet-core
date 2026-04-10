@@ -42,6 +42,11 @@
         <target state="translated">Désolé, le service MCP Tool n’est pas disponible. Veuillez vérifier que GitHub Copilot est installé et que vous êtes connecté(e).</target>
         <note>Do not translate GitHub or Copilot</note>
       </trans-unit>
+      <trans-unit id="Error_NuGetSolverNotAvailable">
+        <source>The NuGet Solver tool is unavailable. Please enable the NuGet MCP Server in the GitHub Copilot chat window and try again.</source>
+        <target state="translated">Désolé, l’outil Solutionneur NuGet n’est pas disponible. Veuillez activer le serveur MCP NuGet dans la fenêtre de conversation GitHub Copilot et réessayer.</target>
+        <note>Do not translate GitHub or Copilot</note>
+      </trans-unit>
       <trans-unit id="Error_PackageSourceMappingPattern_Missing">
         <source>A package pattern must be provided.</source>
         <target state="translated">Le modèle de package doit être fourni.</target>

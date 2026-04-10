@@ -132,13 +132,11 @@ public sealed class RazorProjectEngine
         return ProcessCore(codeDocument, cancellationToken);
     }
 
-    internal RazorCodeDocument CreateCodeDocument(RazorProjectItem projectItem, bool designTime)
+    internal RazorCodeDocument CreateCodeDocument(RazorProjectItem projectItem)
     {
         ArgHelper.ThrowIfNull(projectItem);
 
-        return designTime
-            ? CreateCodeDocumentDesignTimeCore(projectItem)
-            : CreateCodeDocumentCore(projectItem);
+        return CreateCodeDocumentCore(projectItem);
     }
 
     internal RazorCodeDocument CreateCodeDocument(
@@ -335,8 +333,9 @@ public sealed class RazorProjectEngine
         phases.Add(new DefaultRazorParsingPhase());
         phases.Add(new DefaultRazorSyntaxTreePhase());
         phases.Add(new DefaultRazorTagHelperContextDiscoveryPhase());
-        phases.Add(new DefaultRazorTagHelperRewritePhase());
         phases.Add(new DefaultRazorIntermediateNodeLoweringPhase());
+        phases.Add(new DefaultTagHelperResolutionPhase());
+        phases.Add(new DefaultRazorTagHelperRewritePhase());
         phases.Add(new DefaultRazorDocumentClassifierPhase());
         phases.Add(new DefaultRazorDirectiveClassifierPhase());
         phases.Add(new DefaultRazorOptimizationPhase());

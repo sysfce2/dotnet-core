@@ -3433,7 +3433,6 @@ EndGlobal";
             {
                 var xml = XDocument.Load(stream);
                 ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
-                ProjectFileUtils.AddProperty(xml, "SDKAnalysisLevel", "10.0.300");
 
                 var attributes = new Dictionary<string, string>() { { "Version", "1.0.0" } };
 
@@ -3507,7 +3506,6 @@ EndGlobal";
             {
                 var xml = XDocument.Load(stream);
                 ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
-                ProjectFileUtils.AddProperty(xml, "SDKAnalysisLevel", "10.0.300");
 
                 var attributes = new Dictionary<string, string>() { { "Version", "1.0.0" } };
 
@@ -3597,7 +3595,6 @@ EndGlobal";
             {
                 var xml = XDocument.Load(stream);
                 ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
-                ProjectFileUtils.AddProperty(xml, "SDKAnalysisLevel", "10.0.300");
 
                 var attributes = new Dictionary<string, string>() { { "Version", "1.0.0" } };
 
@@ -3687,7 +3684,6 @@ EndGlobal";
             {
                 var xml = XDocument.Load(stream);
                 ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
-                ProjectFileUtils.AddProperty(xml, "SDKAnalysisLevel", "10.0.300");
 
                 var attributesA = new Dictionary<string, string>() { { "Version", "1.0.0" } };
                 var attributesB = new Dictionary<string, string>() { { "Version", "1.0.0" } };
@@ -3737,7 +3733,6 @@ EndGlobal";
             {
                 var xml = XDocument.Load(stream);
                 ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
-                ProjectFileUtils.AddProperty(xml, "SDKAnalysisLevel", "10.0.300");
 
                 // Add project reference to project2
                 ProjectFileUtils.AddItem(
@@ -3813,7 +3808,6 @@ EndGlobal";
             {
                 var xml = XDocument.Load(stream);
                 ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
-                ProjectFileUtils.AddProperty(xml, "SDKAnalysisLevel", "10.0.300");
 
                 // Add Project2 reference only for apple alias
                 ProjectFileUtils.AddItem(
@@ -3990,7 +3984,6 @@ EndGlobal";
             {
                 var xml = XDocument.Load(stream);
                 ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
-                ProjectFileUtils.AddProperty(xml, "SDKAnalysisLevel", "10.0.300");
 
                 // Add Project2 reference only for apple alias
                 ProjectFileUtils.AddItem(
@@ -4079,6 +4072,152 @@ EndGlobal";
 
             // Assert - Verify build succeeded
             buildResult.ExitCode.Should().Be(0);
+        }
+
+        [PlatformFact(Platform.Windows)]
+        public async Task DotnetRestore_WithAliasedFramework_SuppressesWithPackageSpecificNoWarn()
+        {
+            using SimpleTestPathContext pathContext = _dotnetFixture.CreateSimpleTestPathContext();
+            var testDirectory = pathContext.SolutionRoot;
+
+            var packageA = new SimpleTestPackageContext("packageA", "1.0.0");
+            packageA.AddFile("lib/net45/a.dll");
+
+            await SimpleTestPackageUtility.CreateFolderFeedV3Async(
+                pathContext.PackageSource,
+                PackageSaveMode.Defaultv3,
+                packageA);
+
+            string apple = nameof(apple);
+            var projectName = "ClassLibrary1";
+            var projectDirectory = Path.Combine(testDirectory, projectName);
+            var projectFile = Path.Combine(projectDirectory, $"{projectName}.csproj");
+            _dotnetFixture.CreateDotnetNewProject(testDirectory, projectName, " classlib", testOutputHelper: _testOutputHelper);
+
+            using (var stream = File.Open(projectFile, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var xml = XDocument.Load(stream);
+                ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple}");
+
+                ProjectFileUtils.AddItem(
+                    xml,
+                    "PackageReference",
+                    packageA.Id,
+                    framework: (string)null,
+                    [],
+                    new Dictionary<string, string>() {
+                        { "Version", packageA.Version },
+                        { "NoWarn", "NU1701" },
+                    });
+
+                var appleProps = new Dictionary<string, string>
+                    {
+                        { "TargetFrameworkIdentifier", ".NETCoreApp" },
+                        { "TargetFrameworkVersion", $"v{TestConstants.DefaultTargetFramework.Version.ToString(2)}" },
+                        { "TargetFrameworkMoniker", $".NETCoreApp, Version={TestConstants.DefaultTargetFramework.Version.ToString(2)}" }
+                    };
+                ProjectFileUtils.AddProperties(xml, appleProps, $" '$(TargetFramework)' == '{apple}' ");
+
+                ProjectFileUtils.WriteXmlToFile(xml, stream);
+            }
+
+            // Act
+            var result = _dotnetFixture.RunDotnetExpectSuccess(pathContext.SolutionRoot, $"restore {projectFile}", testOutputHelper: _testOutputHelper);
+
+            // Assert
+            var assetsFilePath = Path.Combine(projectDirectory, "obj", "project.assets.json");
+            var assetsFile = new LockFileFormat().Read(assetsFilePath);
+            assetsFile.LogMessages.Should().BeEmpty();
+        }
+
+        [PlatformFact(Platform.Windows)]
+        public async Task DotnetRestore_WithAliasesOfSameFramework_WithAssetTargetFallbackProjectReference_CanBuildSuccessfully()
+        {
+            using SimpleTestPathContext pathContext = _dotnetFixture.CreateSimpleTestPathContext();
+
+            var pkgNet472 = new SimpleTestPackageContext("a", "1.0.0");
+            pkgNet472.AddFile("lib/net472/a.dll");
+            await SimpleTestPackageUtility.CreatePackagesAsync(pathContext.PackageSource, pkgNet472);
+
+            string apple = nameof(apple);
+            string banana = nameof(banana);
+
+            var project2Name = "Project2";
+            var project2File = Path.Combine(pathContext.SolutionRoot, project2Name, $"{project2Name}.csproj");
+            _dotnetFixture.CreateDotnetNewProject(pathContext.SolutionRoot, project2Name, " classlib", testOutputHelper: _testOutputHelper);
+            using (var stream = File.Open(project2File, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var xml = XDocument.Load(stream);
+                ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
+
+                ProjectFileUtils.AddItem(
+                    xml,
+                    "PackageReference",
+                    pkgNet472.Id,
+                    string.Empty,
+                    [],
+                    new Dictionary<string, string>() { { "Version", "1.0.0" } });
+
+                var frameworkProps = new Dictionary<string, string>
+                    {
+                        { "TargetFrameworkIdentifier", ".NETFramework" },
+                        { "TargetFrameworkVersion", $"v4.7.2" },
+                    };
+
+                ProjectFileUtils.AddProperties(xml, frameworkProps, $" '$(TargetFramework)' == '{apple}' ");
+                ProjectFileUtils.AddProperties(xml, frameworkProps, $" '$(TargetFramework)' == '{banana}' ");
+
+                ProjectFileUtils.WriteXmlToFile(xml, stream);
+            }
+
+            var projectName = "ClassLibrary1";
+            var projectDirectory = Path.Combine(pathContext.SolutionRoot, projectName);
+            var projectFile = Path.Combine(projectDirectory, $"{projectName}.csproj");
+            _dotnetFixture.CreateDotnetNewProject(pathContext.SolutionRoot, projectName, " classlib", testOutputHelper: _testOutputHelper);
+
+            using (var stream = File.Open(projectFile, FileMode.Open, FileAccess.ReadWrite))
+            {
+                var xml = XDocument.Load(stream);
+                ProjectFileUtils.SetTargetFrameworkForProject(xml, "TargetFrameworks", $"{apple};{banana}");
+
+                // Add project reference to project2
+                ProjectFileUtils.AddItem(
+                    xml,
+                    "ProjectReference",
+                    $"..\\{project2Name}\\{project2Name}.csproj",
+                    string.Empty,
+                    [],
+                    []);
+
+                var frameworkProps = new Dictionary<string, string>
+                    {
+                        { "TargetFrameworkIdentifier", ".NETCoreApp" },
+                        { "TargetFrameworkVersion", $"v{TestConstants.DefaultTargetFramework.Version.ToString(2)}" },
+                    };
+                ProjectFileUtils.AddProperties(xml, frameworkProps, $" '$(TargetFramework)' == '{apple}' ");
+                ProjectFileUtils.AddProperties(xml, frameworkProps, $" '$(TargetFramework)' == '{banana}' ");
+                ProjectFileUtils.WriteXmlToFile(xml, stream);
+            }
+
+            // Act
+            var result = _dotnetFixture.RunDotnetExpectSuccess(pathContext.SolutionRoot, $"restore {projectFile}", testOutputHelper: _testOutputHelper);
+
+            // Assert
+            var assetsFilePath = Path.Combine(projectDirectory, "obj", "project.assets.json");
+            var assetsFile = new LockFileFormat().Read(assetsFilePath);
+
+            LockFileTarget appleTarget = assetsFile.GetTarget(apple, null);
+            appleTarget.Libraries.Should().HaveCount(2);
+            LockFileTarget bananaTarget = assetsFile.GetTarget(banana, null);
+            bananaTarget.Libraries.Should().HaveCount(2);
+
+            assetsFile.LogMessages.Should().HaveCount(1);
+            assetsFile.LogMessages[0].Level.Should().Be(LogLevel.Warning);
+            assetsFile.LogMessages[0].Code.Should().Be(NuGetLogCode.NU1701);
+            //assetsFile.LogMessages[0].TargetGraphs.Should().HaveCount(2);
+
+            var buildResult = _dotnetFixture.RunDotnetExpectSuccess(pathContext.SolutionRoot, $"build {projectFile} --no-restore", testOutputHelper: _testOutputHelper);
+            buildResult.AllOutput.Should().Contain("NU1702");
         }
 
         private void AssertRelatedProperty(IList<LockFileItem> items, string path, string related)

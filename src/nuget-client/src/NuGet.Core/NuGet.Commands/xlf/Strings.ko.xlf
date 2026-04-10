@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.2" xsi:schemaLocation="urn:oasis:names:tc:xliff:document:1.2 xliff-core-1.2-transitional.xsd">
   <file datatype="xml" source-language="en" target-language="ko" original="../Strings.resx">
     <body>
@@ -678,11 +678,16 @@ For more information, visit https://docs.nuget.org/docs/reference/command-line-r
         <target state="translated">로컬 리소스를 부분적으로 지웠습니다.</target>
         <note />
       </trans-unit>
+      <trans-unit id="Log_AliasContainsDisallowedCharacters">
+        <source>The project {0} contains a TargetFramework '{1}' with disallowed characters. TargetFramework names must contain only ASCII characters and must not contain path separators.</source>
+        <target state="new">The project {0} contains a TargetFramework '{1}' with disallowed characters. TargetFramework names must contain only ASCII characters and must not contain path separators.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="Log_AliasingSupportedInNewDependencyResolver">
         <source>The project {0} is attempting to restore duplicate frameworks, which are supported only in the default dependency resolver when the .NET SDK is version {1} or newer.
 Upgrade your .NET SDK or remove RestoreUseLegacyDependencyResolver to use this feature.</source>
-        <target state="new">The project {0} is attempting to restore duplicate frameworks, which are supported only in the default dependency resolver when the .NET SDK is version {1} or newer.
-Upgrade your .NET SDK or remove RestoreUseLegacyDependencyResolver to use this feature.</target>
+        <target state="translated">프로젝트 {0}이(가) .NET SDK 버전이 {1} 이상일 때 기본 종속성 확인자에서만 지원되는 중복 프레임워크를 복원하려고 합니다.
+이 기능을 사용하려면 .NET SDK를 업그레이드하거나 RestoreUseLegacyDependencyResolver를 제거하세요.</target>
         <note />
       </trans-unit>
       <trans-unit id="Log_AllProjectsUpToDate">
@@ -995,6 +1000,11 @@ Upgrade your .NET SDK or remove RestoreUseLegacyDependencyResolver to use this f
         <target state="translated">{0}에 대해 버전 충돌이 검색되었습니다. 이 문제를 해결하려면 {1}을(를) {2} 프로젝트에 직접 설치/참조하세요.</target>
         <note />
       </trans-unit>
+      <trans-unit id="Log_VersionConflictForCentralTransitive">
+        <source>Version conflict detected for {0}. Central Package Management transitive pinning is enabled. Add a PackageVersion for {1} to resolve this issue.</source>
+        <target state="new">Version conflict detected for {0}. Central Package Management transitive pinning is enabled. Add a PackageVersion for {1} to resolve this issue.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="Log_WritingAssetsFile">
         <source>Writing assets file to disk. Path: {0}</source>
         <target state="translated">자산 파일을 디스크에 쓰는 중입니다. 경로: {0}</target>
@@ -1266,7 +1276,7 @@ Upgrade your .NET SDK or remove RestoreUseLegacyDependencyResolver to use this f
       </trans-unit>
       <trans-unit id="SpecValidationDuplicateTargetAlias">
         <source>The TargetFramework property must be unique. List of TargetFramework properties: {0}.</source>
-        <target state="new">The TargetFramework property must be unique. List of TargetFramework properties: {0}.</target>
+        <target state="translated">TargetFramework 속성은 고유해야 합니다. TargetFramework 속성 목록: {0}.</target>
         <note />
       </trans-unit>
       <trans-unit id="SpecValidationInvalidFramework">

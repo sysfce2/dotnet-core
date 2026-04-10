@@ -67,6 +67,17 @@ namespace NuGet.Test.Utility
         public string ProjectPath { get; set; }
 
         /// <summary>
+        /// If this represents a file-based app, this is the content (XML text) of the virtual project.
+        /// </summary>
+        public string VirtualProjectContent { get; set; }
+
+        /// <summary>
+        /// If this represents a file-based app, this is the path of the virtual project
+        /// (and <see cref="ProjectPath"/> is the path of the entry-point <c>.cs</c> file).
+        /// </summary>
+        public string VirtualProjectPath { get; set; }
+
+        /// <summary>
         /// MSBuildProjectExtensionsPath
         /// </summary>
         public string ProjectExtensionsPath { get; set; }
@@ -127,6 +138,8 @@ namespace NuGet.Test.Utility
         public bool SingleTargetFramework { get; set; }
 
         public bool SetMSBuildProjectExtensionsPath { get; set; } = true;
+
+        public string SDKAnalysisLevel { get; set; }
 
         /// <summary>
         /// project.lock.json or project.assets.json
@@ -248,6 +261,7 @@ namespace NuGet.Test.Utility
         {
             get
             {
+                var filePath = VirtualProjectPath ?? ProjectPath;
                 var _packageSpec = new PackageSpec(Frameworks
                     .Select(f => new TargetFrameworkInformation()
                     {
@@ -257,10 +271,10 @@ namespace NuGet.Test.Utility
                     }).ToList());
                 _packageSpec.RestoreMetadata = new ProjectRestoreMetadata();
                 _packageSpec.Name = ProjectName;
-                _packageSpec.FilePath = ProjectPath;
+                _packageSpec.FilePath = filePath;
                 _packageSpec.RestoreMetadata.ProjectUniqueName = ProjectName;
                 _packageSpec.RestoreMetadata.ProjectName = ProjectName;
-                _packageSpec.RestoreMetadata.ProjectPath = ProjectPath;
+                _packageSpec.RestoreMetadata.ProjectPath = filePath;
                 _packageSpec.RestoreMetadata.ProjectStyle = Type;
                 _packageSpec.RestoreMetadata.OutputPath = ProjectExtensionsPath;
                 _packageSpec.RestoreMetadata.OriginalTargetFrameworks = _packageSpec.TargetFrameworks.Select(e => e.TargetAlias).ToList();
@@ -288,6 +302,16 @@ namespace NuGet.Test.Utility
                 if (Frameworks.Count > 1)
                 {
                     _packageSpec.RestoreMetadata.CrossTargeting = true;
+                    _packageSpec.RestoreMetadata.UsingMicrosoftNETSdk = true;
+                }
+
+                if (!IsLegacyPackageReference)
+                {
+                    _packageSpec.RestoreMetadata.UsingMicrosoftNETSdk = true;
+                    if (!string.IsNullOrEmpty(SDKAnalysisLevel))
+                    {
+                        _packageSpec.RestoreMetadata.SdkAnalysisLevel = NuGetVersion.Parse(SDKAnalysisLevel);
+                    }
                 }
 
                 return _packageSpec;
@@ -347,7 +371,14 @@ namespace NuGet.Test.Utility
 
         public void Save()
         {
-            Save(ProjectPath);
+            if (VirtualProjectPath != null)
+            {
+                VirtualProjectContent = GetXML().ToString();
+            }
+            else
+            {
+                Save(ProjectPath);
+            }
         }
 
         public void Save(string path)

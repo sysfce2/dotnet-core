@@ -24,7 +24,8 @@ public class SigningComparer : BuildComparer
         int parallelTasks,
         string baselineFilePath,
         string exclusionsFilePath,
-        string sdkTaskScript)
+        string sdkTaskScript,
+        string[] includedRepositories)
         : base(
             clean,
             assetType,
@@ -37,7 +38,8 @@ public class SigningComparer : BuildComparer
             issuesToReport: new List<IssueType>
             {
                 IssueType.Unsigned
-            })
+            },
+            includedRepositories)
     {
         _signCheckExecuter = new SignCheckExecuter(exclusionsFilePath, sdkTaskScript);
         InitializeSignCheck().Wait();
@@ -209,7 +211,6 @@ public class SigningComparer : BuildComparer
                 _baseArguments =
                     $"{sdkTaskScript} " +
                     $"{_argumentsPrefix}task SigningValidation " +
-                    $"{_argumentsPrefix}msbuildEngine vs " +
                     $"{_argumentsPrefix}excludeCIBinaryLog";
             }
             else

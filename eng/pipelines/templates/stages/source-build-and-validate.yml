@@ -38,6 +38,11 @@ parameters:
   type: string
   default: ''
 
+# Extra MSBuild properties to pass only to source-build stage 2 legs (those that reuse stage 1 artifacts).
+- name: extraPropertiesStage2
+  type: string
+  default: ''
+
 stages:
 - stage: VMR_SourceOnly_Build
   displayName: VMR Source-Only Build
@@ -110,6 +115,8 @@ stages:
             image: ${{ variables.alpineContainerImage }}
           artifactsRid: ${{ variables.alpineX64Rid }}
           targetRid: ${{ variables.alpineX64Rid }}
+          # CG downloads linux-x64 binaries which won't work on musl-based distros like Alpine
+          disableComponentGovernance: true
           ${{ if ne(leg.reuseBuildArtifactsFrom, '') }}:
             reuseBuildArtifactsFrom:
             - ${{ format(leg.reuseBuildArtifactsFrom, variables.centOSStreamName) }}
@@ -135,12 +142,21 @@ stages:
           signType: ${{ variables.signType }}
         excludeRuntimeDependentJobs: ${{ parameters.excludeRuntimeDependentJobs }}
         brandingType: ${{ variables.brandingType }}
+        ${{ if leg.disableBinaryAnalysisCaching }}:
+          disableBinaryAnalysisCaching: true
         
-        # We only want to publish SB artifacts for each distinct distro/version/arch combination
+        # We only want to publish SB artifacts for each distinct distro/version/arch combination.
+        # Stage 2 legs (those with reuseBuildArtifactsFrom) also get extraPropertiesStage2.
         ${{ if and(endsWith(leg.buildNameFormat, 'Offline_MsftSdk'), not(contains(leg.buildNameFormat, '_Mono_'))) }}:
-          extraProperties: ${{ leg.extraProperties }} /p:DotNetSourceOnlyPublishArtifacts=true
+          ${{ if ne(leg.reuseBuildArtifactsFrom, '') }}:
+            extraProperties: ${{ leg.extraProperties }} ${{ parameters.extraPropertiesStage2 }} /p:DotNetSourceOnlyPublishArtifacts=true
+          ${{ else }}:
+            extraProperties: ${{ leg.extraProperties }} /p:DotNetSourceOnlyPublishArtifacts=true
         ${{ else }}:
-          extraProperties: ${{ leg.extraProperties }}
+          ${{ if ne(leg.reuseBuildArtifactsFrom, '') }}:
+            extraProperties: ${{ leg.extraProperties }} ${{ parameters.extraPropertiesStage2 }}
+          ${{ else }}:
+            extraProperties: ${{ leg.extraProperties }}
 
 - ${{ if and(parameters.isBuiltFromVmr, ne(variables['Build.Reason'], 'PullRequest'), eq(parameters.useMicrosoftBuildAssetsForTests, true)) }}:
   - stage: VMR_SourceOnly_Validation
@@ -200,6 +216,8 @@ stages:
               image: ${{ variables.alpineContainerImage }}
             artifactsRid: ${{ variables.alpineX64Rid }}
             targetRid: ${{ variables.alpineX64Rid }}
+            # CG downloads linux-x64 binaries which won't work on musl-based distros like Alpine
+            disableComponentGovernance: true
 
           targetArchitecture: ${{ leg.targetArchitecture }}
           isBuiltFromVmr: ${{ parameters.isBuiltFromVmr }}
@@ -214,11 +232,14 @@ stages:
           skipBuild: true
           extraProperties: >
             ${{ leg.extraProperties }}
+            ${{ parameters.extraPropertiesStage2 }}
             /p:DotNetSourceOnlyTestOnly=true
             /p:ExtraRestoreSourcePath=$(Pipeline.Workspace)/msft-pkgs
             /p:RestoreAdditionalProjectSources=$(Pipeline.Workspace)/msft-pkgs
           excludeRuntimeDependentJobs: ${{ parameters.excludeRuntimeDependentJobs }}
           brandingType: ${{ variables.brandingType }}
+          ${{ if leg.disableBinaryAnalysisCaching }}:
+            disableBinaryAnalysisCaching: true
           
           testInitSteps:
           # Ensure the artifacts staging directory exists so that even if no files get placed there, it won't fail
@@ -229,7 +250,7 @@ stages:
             - template: ../steps/download-artifacts.yml
               parameters:
                 artifactDescription: Microsoft Linux (musl) Packages
-                artifactName: AzureLinux_x64_Cross_Alpine_${{ leg.targetArchitecture }}_Artifacts
+                artifactName: Linux_Alpine_${{ leg.targetArchitecture }}_Artifacts
                 downloadFilePatterns: packages/Release/Shipping/**
                 copyDestination: $(Pipeline.Workspace)/msft-pkgs
                 flattenDirs: true
@@ -237,7 +258,7 @@ stages:
             - template: ../steps/download-artifacts.yml
               parameters:
                 artifactDescription: Microsoft Linux Packages
-                artifactName: AzureLinux_x64_Cross_${{ leg.targetArchitecture }}_Artifacts
+                artifactName: Linux_${{ leg.targetArchitecture }}_Artifacts
                 downloadFilePatterns: packages/Release/Shipping/**
                 copyDestination: $(Pipeline.Workspace)/msft-pkgs
                 flattenDirs: true

@@ -1,15 +1,12 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
 namespace System;
 
 /// <summary>
 ///  Fast stack based <see cref="Span{T}"/> writer.
 /// </summary>
-internal unsafe ref struct SpanWriter<T>(Span<T> span) where T : unmanaged, IEquatable<T>
+internal ref struct SpanWriter<T>(Span<T> span) where T : unmanaged, IEquatable<T>
 {
     private Span<T> _unwritten = span;
     public Span<T> Span { get; } = span;
@@ -100,6 +97,10 @@ internal unsafe ref struct SpanWriter<T>(Span<T> span) where T : unmanaged, IEqu
     private static void UncheckedSlice(ref Span<T> span, int start, int length)
     {
         Debug.Assert((uint)start <= (uint)span.Length && (uint)length <= (uint)(span.Length - start));
+#if NETFRAMEWORK
+        span = span.Slice(start, length);
+#else
         span = MemoryMarshal.CreateSpan(ref Unsafe.Add(ref MemoryMarshal.GetReference(span), (nint)(uint)start), length);
+#endif
     }
 }

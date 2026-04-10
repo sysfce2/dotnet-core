@@ -9,7 +9,7 @@ using System.Linq;
 using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Arcade.Test.Common;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
@@ -246,9 +246,7 @@ namespace Microsoft.DotNet.SignTool.Tests
 
             ".py",
             ".pyd",
-#if !NETFRAMEWORK
             ".deb",
-#endif
         };
 
         public static IEnumerable<object[]> GetSignableExtensions()
@@ -279,8 +277,7 @@ namespace Microsoft.DotNet.SignTool.Tests
         }
 
         private static string s_snPath = Path.Combine(Path.GetDirectoryName(typeof(SignToolTests).Assembly.Location), "tools", "sn", "sn.exe");
-        private static string s_tarToolPath = Path.Combine(Path.GetDirectoryName(typeof(SignToolTests).Assembly.Location), "tools", "tar", "Microsoft.Dotnet.Tar.dll");
-        private static string s_pkgToolPath = Path.Combine(Path.GetDirectoryName(typeof(SignToolTests).Assembly.Location), "tools", "pkg", "Microsoft.Dotnet.MacOsPkg.dll");
+        private static string s_pkgToolPath = Path.Combine(Path.GetDirectoryName(typeof(SignToolTests).Assembly.Location), "tools", "pkg", "Microsoft.Dotnet.MacOsPkg.Cli.dll");
 
         private string GetResourcePath(string name, string relativePath = null)
         {
@@ -341,11 +338,11 @@ namespace Microsoft.DotNet.SignTool.Tests
             // The path to DotNet will always be null in these tests, this will force
             // the signing logic to call our FakeBuildEngine.BuildProjectFile with a path
             // to the XML that store the content of the would be Microbuild sign request.
-            var signToolArgs = new SignToolArgs(_tmpDir, microBuildCorePath: "MicroBuildCorePath", testSign: true, dotnetPath: null, msbuildVerbosity: "quiet", _tmpDir, enclosingDir: "", "", wix3ToolsPath: wix3ToolsPath, wixToolsPath: wixToolsPath, tarToolPath: s_tarToolPath, pkgToolPath: s_pkgToolPath, dotnetTimeout: -1);
+            var signToolArgs = new SignToolArgs(_tmpDir, microBuildCorePath: "MicroBuildCorePath", testSign: true, dotnetPath: null, msbuildVerbosity: "quiet", _tmpDir, enclosingDir: "", "", wix3ToolsPath: wix3ToolsPath, wixToolsPath: wixToolsPath, pkgToolPath: s_pkgToolPath, dotnetTimeout: -1);
 
             var signTool = new FakeSignTool(signToolArgs, task.Log);
             // Passing null for the 3rd party check skip as this doesn't affect the generated project.
-            var configuration = new Configuration(signToolArgs.TempDir, itemsToSign, strongNameSignInfo, fileSignInfo, extensionsSignInfo, additionalCertificateInfo, null, tarToolPath: s_tarToolPath, pkgToolPath: s_pkgToolPath, snPath: s_snPath, task.Log);
+            var configuration = new Configuration(signToolArgs.TempDir, itemsToSign, strongNameSignInfo, fileSignInfo, extensionsSignInfo, additionalCertificateInfo, null, pkgToolPath: s_pkgToolPath, snPath: s_snPath, task.Log);
             var signingInput = configuration.GenerateListOfFiles();
             var util = new BatchSignUtil(
                 task.BuildEngine,
@@ -393,7 +390,7 @@ namespace Microsoft.DotNet.SignTool.Tests
             var engine = new FakeBuildEngine();
             var task = new SignToolTask { BuildEngine = engine };
             var signingInput = new Configuration(_tmpDir, itemsToSign, strongNameSignInfo, fileSignInfo, extensionsSignInfo, additionalCertificateInfo,
-                skip3rdPartyCheckFiles, tarToolPath: s_tarToolPath, pkgToolPath: s_pkgToolPath, snPath: s_snPath, task.Log).GenerateListOfFiles();
+                skip3rdPartyCheckFiles, pkgToolPath: s_pkgToolPath, snPath: s_snPath, task.Log).GenerateListOfFiles();
 
             signingInput.FilesToSign.Select(f => f.ToString()).Should().BeEquivalentTo(expected);
             signingInput.FilesToCopy.Select(f => $"{f.Key} -> {f.Value}").Should().BeEquivalentTo(expectedCopyFiles ?? Array.Empty<string>());
@@ -401,12 +398,12 @@ namespace Microsoft.DotNet.SignTool.Tests
             engine.LogWarningEvents.Select(w => $"{w.Code}: {w.Message}").Should().BeEquivalentTo(expectedWarnings ?? Array.Empty<string>());
         }
 
-#if !NETFRAMEWORK
         private void ValidateProducedDebContent(
             string debianPackage,
             (string, string)[] expectedFilesOriginalHashes,
             string[] signableFiles,
-            string expectedControlFileContent)
+            string expectedControlFileContent,
+            (string path, string target)[] expectedSymlinks = null)
         {
             string tempDir = Path.Combine(_tmpDir, "verification");
             Directory.CreateDirectory(tempDir);
@@ -440,18 +437,35 @@ namespace Microsoft.DotNet.SignTool.Tests
 
                 using MD5 md5 = MD5.Create();
                 using FileStream fileStream = File.OpenRead(layoutFilePath);
-                string newHash = Convert.ToHexString(md5.ComputeHash(fileStream));
+                string newHash = Convert.ToHexStringLower(md5.ComputeHash(fileStream));
 
                 if (signableFiles.Contains(targetSystemFilePath))
                 {
                     newHash.Should().NotBe(originalHash);
-                    md5sumsContents.Should().Contain($"{newHash} {targetSystemFilePath}");
-                    md5sumsContents.Should().NotContain($"{originalHash} {targetSystemFilePath}");
+                    md5sumsContents.Should().Contain($"{newHash}  {targetSystemFilePath}");
+                    md5sumsContents.Should().NotContain($"{originalHash}  {targetSystemFilePath}");
                 }
                 else
                 {
                     newHash.Should().Be(originalHash);
-                    md5sumsContents.Should().Contain($"{originalHash} {targetSystemFilePath}");
+                    md5sumsContents.Should().Contain($"{originalHash}  {targetSystemFilePath}");
+                }
+            }
+
+            // Checks: Symbolic links are preserved and point to the correct targets
+            if (expectedSymlinks != null)
+            {
+                foreach ((string symlinkPath, string expectedTarget) in expectedSymlinks)
+                {
+                    string layoutPath = Path.Combine(dataLayout, symlinkPath);
+                    var fileInfo = new FileInfo(layoutPath);
+                    fileInfo.Exists.Should().BeTrue($"symlink '{symlinkPath}' should exist");
+                    fileInfo.LinkTarget.Should().Be(expectedTarget, $"symlink '{symlinkPath}' should point to '{expectedTarget}'");
+
+                    // Verify the symlink resolves to a valid file with the same content as its target
+                    string resolvedTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(layoutPath)!, expectedTarget));
+                    File.ReadAllBytes(layoutPath).Should().BeEquivalentTo(File.ReadAllBytes(resolvedTarget),
+                        $"symlink '{symlinkPath}' should resolve to the signed file");
                 }
             }
 
@@ -472,7 +486,8 @@ namespace Microsoft.DotNet.SignTool.Tests
             string rpmPackage,
             (string, string)[] expectedFilesOriginalHashes,
             string[] signableFiles,
-            string originalUncompressedPayloadChecksum)
+            string originalUncompressedPayloadChecksum,
+            (string path, string target)[] expectedSymlinks = null)
         {
             string tempDir = Path.Combine(_tmpDir, "verification");
             Directory.CreateDirectory(tempDir);
@@ -506,6 +521,23 @@ namespace Microsoft.DotNet.SignTool.Tests
                 }
             }
 
+            // Checks: Symbolic links are preserved and point to the correct targets
+            if (expectedSymlinks != null)
+            {
+                foreach ((string symlinkPath, string expectedTarget) in expectedSymlinks)
+                {
+                    string layoutPath = Path.Combine(layout, symlinkPath);
+                    var fileInfo = new FileInfo(layoutPath);
+                    fileInfo.Exists.Should().BeTrue($"symlink '{symlinkPath}' should exist");
+                    fileInfo.LinkTarget.Should().Be(expectedTarget, $"symlink '{symlinkPath}' should point to '{expectedTarget}'");
+
+                    // Verify the symlink resolves to a valid file with the same content as its target
+                    string resolvedTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(layoutPath)!, expectedTarget));
+                    File.ReadAllBytes(layoutPath).Should().BeEquivalentTo(File.ReadAllBytes(resolvedTarget),
+                        $"symlink '{symlinkPath}' should resolve to the signed file");
+                }
+            }
+
             // Checks:
             // Header payload digest matches the hash of the payload
             // Header payload digest is different than the hash of the original payload
@@ -523,7 +555,35 @@ namespace Microsoft.DotNet.SignTool.Tests
                 checksum.Should().Be(uncompressedPayloadDigest);
             }
         }
-#endif
+
+        private void ValidateProducedTarGZipContent(
+            string tarGZipPath,
+            (string path, string target)[] expectedSymlinks)
+        {
+            string tempDir = Path.Combine(_tmpDir, "verification");
+            Directory.CreateDirectory(tempDir);
+
+            string layout = Path.Combine(tempDir, "tgz");
+            Directory.CreateDirectory(layout);
+
+            var fakeBuildEngine = new FakeBuildEngine(_output);
+            var fakeLog = new TaskLoggingHelper(fakeBuildEngine, "TestLog");
+            ZipData.ExtractTarballContents(fakeLog, tarGZipPath, layout, skipSymlinks: false);
+
+            foreach ((string symlinkPath, string expectedTarget) in expectedSymlinks)
+            {
+                string layoutPath = Path.Combine(layout, symlinkPath);
+                var fileInfo = new FileInfo(layoutPath);
+                fileInfo.Exists.Should().BeTrue($"symlink '{symlinkPath}' should exist");
+                fileInfo.LinkTarget.Should().Be(expectedTarget, $"symlink '{symlinkPath}' should point to '{expectedTarget}'");
+
+                // Verify the symlink resolves to a valid file with the same content as its target
+                string resolvedTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(layoutPath)!, expectedTarget));
+                File.ReadAllBytes(layoutPath).Should().BeEquivalentTo(File.ReadAllBytes(resolvedTarget),
+                    $"symlink '{symlinkPath}' should resolve to the signed file");
+            }
+        }
+
         [Fact]
         public void EmptySigningList()
         {
@@ -534,7 +594,7 @@ namespace Microsoft.DotNet.SignTool.Tests
             var fileSignInfo = new Dictionary<ExplicitSignInfoKey, FileSignInfoEntry>();
 
             var task = new SignToolTask { BuildEngine = new FakeBuildEngine() };
-            var signingInput = new Configuration(_tmpDir, itemsToSign, strongNameSignInfo, fileSignInfo, s_fileExtensionSignInfo, null, null, tarToolPath: s_tarToolPath, pkgToolPath: s_pkgToolPath, snPath: s_snPath, task.Log).GenerateListOfFiles();
+            var signingInput = new Configuration(_tmpDir, itemsToSign, strongNameSignInfo, fileSignInfo, s_fileExtensionSignInfo, null, null, pkgToolPath: s_pkgToolPath, snPath: s_snPath, task.Log).GenerateListOfFiles();
 
             signingInput.FilesToSign.Should().BeEmpty();
             signingInput.ZipDataMap.Should().BeEmpty();
@@ -1485,7 +1545,7 @@ $@"
             {
                 {  "MacDeveloperHardenWithNotarization",
                     new List<AdditionalCertificateInformation>() {
-                        new AdditionalCertificateInformation() { MacNotarizationAppName = "dotnet", MacSigningOperation = "MacDeveloperHarden" }
+                        new AdditionalCertificateInformation() { MacNotarizationAppName = "com.microsoft.dotnet", MacSigningOperation = "MacDeveloperHarden" }
                     } 
                 }
             };
@@ -1524,6 +1584,7 @@ $@"
                 <Authenticode>Microsoft400</Authenticode>
                 </FilesToSign>
                 ",
+                // Signing rounds use .pkg.zip because MicroBuild expects zipped packages
                 $@"
                 <FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "ContainerSigning", "1", "NestedPkg.pkg.zip"))}"">
                 <Authenticode>MacDeveloperHarden</Authenticode>
@@ -1533,8 +1594,10 @@ $@"
                 <Authenticode>MacDeveloperHarden</Authenticode>
                 </FilesToSign>
                 ",
+                // Notarization round uses the unzipped .pkg path — files are unzipped
+                // before notarization (see SignTool.cs: "Notarization does not expect zipped packages")
                 $@"
-                <FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.pkg.zip"))}"">
+                <FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.pkg"))}"">
                 <Authenticode>8020</Authenticode>
                 <MacAppName>com.microsoft.dotnet</MacAppName>
                 </FilesToSign>",
@@ -1691,6 +1754,99 @@ $@"
             });
         }
 
+        /// <summary>
+        /// Validates that tar.gz archives containing symbolic links are handled correctly.
+        /// On Windows, ReadTarGZipEntriesWithExternalTar throws when symlinks are detected,
+        /// so this test is skipped on Windows.
+        /// </summary>
+        [UnixOnlyFactAttribute]
+        public void SignTarGZipFileWithSymlinks()
+        {
+            // List of files to be considered for signing
+            var itemsToSign = new List<ItemToSign>()
+            {
+                new ItemToSign(GetResourcePath("testSymlinks.tgz"))
+            };
+
+            // Default signing information
+            var strongNameSignInfo = new Dictionary<string, List<SignInfo>>()
+            {
+                { "581d91ccdfc4ea9c", new List<SignInfo>{ new SignInfo(certificate: "ArcadeCertTest", strongName: "ArcadeStrongTest") } }
+            };
+
+            // Overriding information
+            var fileSignInfo = new Dictionary<ExplicitSignInfoKey, FileSignInfoEntry>();
+
+            // The symlink (test/this_is_a_big_folder_name_look/NativeLibrary.dll -> ../NativeLibrary.dll)
+            // is filtered out by System.Formats.Tar on non-Windows, so only regular files are signed.
+            ValidateFileSignInfos(itemsToSign, strongNameSignInfo, fileSignInfo, s_fileExtensionSignInfo, new[]
+            {
+                "File 'NativeLibrary.dll' Certificate='Microsoft400'",
+                "File 'SOS.NETCore.dll' TargetFramework='.NETCoreApp,Version=v1.0' Certificate='Microsoft400'",
+                "File 'Nested.NativeLibrary.dll' Certificate='Microsoft400'",
+                "File 'Nested.SOS.NETCore.dll' TargetFramework='.NETCoreApp,Version=v1.0' Certificate='Microsoft400'",
+                "File 'testSymlinks.tgz'",
+            });
+
+            ValidateProducedTarGZipContent(Path.Combine(_tmpDir, "testSymlinks.tgz"), new[]
+            {
+                ("test/this_is_a_big_folder_name_look/NativeLibrary.dll", "../NativeLibrary.dll")
+            });
+        }
+
+        // TODO: Remove WindowsOnlyFact once https://github.com/dotnet/arcade/issues/16484 is resolved.
+        [WindowsOnlyFact]
+        public void SignTarGZipFileWithHardlinks()
+        {
+            // List of files to be considered for signing
+            var itemsToSign = new List<ItemToSign>()
+            {
+                new ItemToSign(GetResourcePath("testHardlinks.tgz"))
+            };
+
+            // Default signing information
+            var strongNameSignInfo = new Dictionary<string, List<SignInfo>>()
+            {
+                { "581d91ccdfc4ea9c", new List<SignInfo>{ new SignInfo(certificate: "ArcadeCertTest", strongName: "ArcadeStrongTest") } }
+            };
+
+            // Overriding information
+            var fileSignInfo = new Dictionary<ExplicitSignInfoKey, FileSignInfoEntry>();
+
+            // All three files (original + 2 hardlinks) should be detected for signing
+            ValidateFileSignInfos(itemsToSign, strongNameSignInfo, fileSignInfo, s_fileExtensionSignInfo, new[]
+            {
+                "File 'hardlink1.dll' TargetFramework='.NETStandard,Version=v2.0' Certificate='ArcadeCertTest' StrongName='ArcadeStrongTest'",
+                "File 'hardlink2.dll' TargetFramework='.NETStandard,Version=v2.0' Certificate='ArcadeCertTest' StrongName='ArcadeStrongTest'",
+                "File 'original.dll' TargetFramework='.NETStandard,Version=v2.0' Certificate='ArcadeCertTest' StrongName='ArcadeStrongTest'",
+                "File 'testHardlinks.tgz'",
+            },
+            expectedWarnings: new[]
+            {
+                $@"SIGN004: Signing 3rd party library '{Path.Combine(_tmpDir, "ContainerSigning", "0", "hardlink1.dll")}' with Microsoft certificate 'ArcadeCertTest'. The library is considered 3rd party library due to its copyright: ''.",
+                $@"SIGN004: Signing 3rd party library '{Path.Combine(_tmpDir, "ContainerSigning", "1", "hardlink2.dll")}' with Microsoft certificate 'ArcadeCertTest'. The library is considered 3rd party library due to its copyright: ''.",
+                $@"SIGN004: Signing 3rd party library '{Path.Combine(_tmpDir, "ContainerSigning", "2", "original.dll")}' with Microsoft certificate 'ArcadeCertTest'. The library is considered 3rd party library due to its copyright: ''.",
+            });
+
+            ValidateGeneratedProject(itemsToSign, strongNameSignInfo, fileSignInfo, s_fileExtensionSignInfo, new[]
+            {
+$@"
+<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "ContainerSigning", "0", "hardlink1.dll"))}"">
+  <Authenticode>ArcadeCertTest</Authenticode>
+  <StrongName>ArcadeStrongTest</StrongName>
+</FilesToSign>
+<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "ContainerSigning", "1", "hardlink2.dll"))}"">
+  <Authenticode>ArcadeCertTest</Authenticode>
+  <StrongName>ArcadeStrongTest</StrongName>
+</FilesToSign>
+<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "ContainerSigning", "2", "original.dll"))}"">
+  <Authenticode>ArcadeCertTest</Authenticode>
+  <StrongName>ArcadeStrongTest</StrongName>
+</FilesToSign>
+"
+            });
+        }
+
         [Fact]
         public void SymbolsNupkg()
         {
@@ -1796,8 +1952,7 @@ $@"
             });
         }
 
-#if !NETFRAMEWORK
-        [Fact]
+        [UnixOnlyFact]
         public void CheckDebSigning()
         {
             // List of files to be considered for signing
@@ -1831,14 +1986,18 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.deb"
 
             var expectedFilesOriginalHashes = new (string, string)[]
             {
-                ("usr/local/bin/hello", "644981BBD6F4ED1B3CF68CD0F47981AA"),
-                ("usr/local/bin/mscorlib.dll", "B80EEBA2B8616B7C37E49B004D69BBB7")
+                ("usr/local/bin/hello", "644981bbd6f4ed1b3cf68cd0f47981aa"),
+                ("usr/local/bin/mscorlib.dll", "b80eeba2b8616b7c37e49b004d69bbb7")
             };
             string[] signableFiles = ["usr/local/bin/mscorlib.dll"];
             string expectedControlFileContent = "Package: test\nVersion: 1.0\nSection: base\nPriority: optional\nArchitecture: all\n";
             expectedControlFileContent +="Maintainer: Arcade <test@example.com>\nInstalled-Size: 48\nDescription: A simple test package\n This is a simple generated .deb package for testing purposes.\n";
+            var expectedSymlinks = new (string, string)[]
+            {
+                ("usr/local/bin/mscorlib-link.dll", "./mscorlib.dll")
+            };
 
-            ValidateProducedDebContent(Path.Combine(_tmpDir, "test.deb"), expectedFilesOriginalHashes, signableFiles, expectedControlFileContent);
+            ValidateProducedDebContent(Path.Combine(_tmpDir, "test.deb"), expectedFilesOriginalHashes, signableFiles, expectedControlFileContent, expectedSymlinks);
         }
 
         [WindowsOnlyFact]
@@ -1907,8 +2066,12 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.rpm"
             };
             string[] signableFiles = ["usr/local/bin/mscorlib.dll"];
             string originalUncompressedPayloadChecksum = "216c2a99006d2e14d28a40c0f14a63f6462f533e89789a6f294186e0a0aad3fd";
+            var expectedSymlinks = new (string, string)[]
+            {
+                ("usr/local/bin/mscorlib-link.dll", "mscorlib.dll")
+            };
 
-            ValidateProducedRpmContent(Path.Combine(_tmpDir, "test.rpm"), expectedFilesOriginalHashes, signableFiles, originalUncompressedPayloadChecksum);
+            ValidateProducedRpmContent(Path.Combine(_tmpDir, "test.rpm"), expectedFilesOriginalHashes, signableFiles, originalUncompressedPayloadChecksum, expectedSymlinks);
         }
 
         [Fact]
@@ -1932,9 +2095,9 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.rpm"
                 "File 'IncorrectlySignedDeb.deb' Certificate='LinuxSign'"
             };
 
-            // If on windows, both packages will be submitted for signing
-            // because the CL verification tool (gpg) is not available on Windows.
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            // If running on a platform other than Linux, both packages will be submitted for signing
+            // because the CL verification tool (gpg) is not available.
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 expectedFilesToBeSigned.Add("File 'SignedDeb.deb' Certificate='LinuxSign'");
             }
@@ -1963,16 +2126,15 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.rpm"
                 "File 'IncorrectlySignedRpm.rpm' Certificate='LinuxSign'"
             };
 
-            // If on windows, both packages will be submitted for signing
-            // because the CL verification tool (gpg) is not available on Windows.
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            // If running on a platform other than Linux, both packages will be submitted for signing
+            // because the CL verification tool (gpg) is not available.
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 expectedFilesToBeSigned.Add("File 'SignedRpm.rpm' Certificate='LinuxSign'");
             }
 
             ValidateFileSignInfos(itemsToSign, strongNameSignInfo, fileSignInfo, s_fileExtensionSignInfo, expectedFilesToBeSigned.ToArray());
         }
-#endif
 
         [Fact]
         public void CheckPowershellSigning()
@@ -1996,11 +2158,12 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.rpm"
             });
         }
 
-        /* These tests return different results on netcoreapp. ie, we can only truly validate nuget integrity when running on framework.
-         * NuGet behaves differently on core vs framework 
-         * - https://github.com/NuGet/NuGet.Client/blob/e88a5a03a1b26099f8be225d3ee3a897b2edb1d0/build/common.targets#L18-L25
+        /* NuGet package integrity verification behaves differently on .NET Core vs .NET Framework.
+         * On .NET Core, NuGet's SignedPackageArchiveUtility.IsSigned() treats packages with
+         * incorrect signatures as signed (only checks for signature markers, not validity).
+         * On .NET Framework, it correctly detects the invalid signature.
+         * See: https://github.com/NuGet/NuGet.Client/blob/e88a5a03a1b26099f8be225d3ee3a897b2edb1d0/build/common.targets#L18-L25
          */
-#if NETFRAMEWORK
         [Fact]
         public void VerifyNupkgIntegrity()
         {
@@ -2010,11 +2173,12 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.rpm"
                 new ItemToSign(GetResourcePath("IncorrectlySignedPackage.1.0.0.nupkg"))
             };
 
+            // On .NET Core, both packages appear as already signed so nothing needs signing.
             ValidateFileSignInfos(itemsToSign,
                                   new Dictionary<string, List<SignInfo>>(),
                                   new Dictionary<ExplicitSignInfoKey, FileSignInfoEntry>(),
                                   s_fileExtensionSignInfo,
-                                  new[] { "File 'IncorrectlySignedPackage.1.0.0.nupkg' Certificate='NuGet'" });
+                                  Array.Empty<string>());
         }
 
         [Fact]
@@ -2036,11 +2200,12 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "test.rpm"
             ValidateFileSignInfos(itemsToSign, strongNameSignInfo, fileSignInfo, s_fileExtensionSignInfo, new[]
             {
                 "File 'UnsignedScript.ps1' Certificate='PSCertificate'",
-                "File 'UnsignedContents.nupkg' Certificate='NuGet'",
-                "File 'FakeSignedContents.nupkg' Certificate='NuGet'"
+                // FakeSignedContents.nupkg appears as already signed on .NET Core
+                // (NuGet only checks for signature markers, not validity).
+                "File 'UnsignedContents.nupkg' Certificate='NuGet'"
             });
         }
-#endif
+
         [WindowsOnlyFact]
         [Trait("Category", "SkipWhenLiveUnitTesting")]
         public void SignMsiEngine()
@@ -2208,7 +2373,7 @@ $@"<FilesToSign Include=""{Uri.EscapeDataString(Path.Combine(_tmpDir, "Container
 
             task.Execute().Should().BeFalse();
             task.Log.HasLoggedErrors.Should().BeTrue();
-            fakeBuildEngine.LogErrorEvents.ForEach(a => a.Message.Should().EndWithEquivalent(" does not exist." ));
+            fakeBuildEngine.LogErrorEvents.ForEach(a => a.Message.Should().EndWith(" does not exist." ));
         }
 
         [Fact]
@@ -2758,7 +2923,6 @@ $@"
                 MicroBuildCorePath = "MicroBuildCorePath",
                 DoStrongNameCheck = false,
                 SNBinaryPath = null,
-                TarToolPath = s_tarToolPath,
                 PkgToolPath = s_pkgToolPath,
             };
 
@@ -3129,7 +3293,6 @@ $@"
                 new Dictionary<string, List<SignInfo>>(),
                 new(),
                 null,
-                tarToolPath: s_tarToolPath,
                 pkgToolPath: s_pkgToolPath,
                 snPath: s_snPath,
                 task.Log)
@@ -3142,6 +3305,12 @@ $@"
         [MemberData(nameof(GetSignableExtensions))]
         public void MissingCertificateNameButExtensionIsIgnored(string extension)
         {
+            //  test.deb contains symbolic links which aren't supported on windows.
+            if (extension == ".deb" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return;
+            }
+
             var needContent = new Dictionary<string, (string, string[])>(StringComparer.OrdinalIgnoreCase)
             {
                 { ".dll", ("EmptyPKT.dll", []) },
@@ -3180,7 +3349,6 @@ $@"
                 extensionSignInfo,
                 new(),
                 null,
-                tarToolPath: s_tarToolPath,
                 pkgToolPath: s_pkgToolPath,
                 snPath: s_snPath,
                 task.Log)
@@ -3542,7 +3710,6 @@ $@"
                 snBinaryPath: "MockSnPath",
                 wix3ToolsPath: null,
                 wixToolsPath: null,
-                tarToolPath: null,
                 pkgToolPath: null,
                 dotnetTimeout: 300000);
 
@@ -3635,5 +3802,130 @@ $@"
                 "File 'NestedContainer.1.0.0.nupkg' Certificate='NuGet'",
             });
         }
+
+        [Fact]
+        public void NotarizationRetriesOnFailure()
+        {
+            // List of files to be considered for signing
+            var itemsToSign = new List<ItemToSign>()
+            {
+                new ItemToSign(GetResourcePath("test.pkg"))
+            };
+
+            // Default signing information
+            var strongNameSignInfo = new Dictionary<string, List<SignInfo>>()
+            {
+                { "581d91ccdfc4ea9c", new List<SignInfo>{ new SignInfo(certificate: "ArcadeCertTest", strongName: "ArcadeStrongTest") } }
+            };
+
+            // Set up the cert to allow for signing and notarization.
+            var additionalCertificateInfo = new Dictionary<string, List<AdditionalCertificateInformation>>()
+            {
+                {  "MacDeveloperHardenWithNotarization",
+                    new List<AdditionalCertificateInformation>() {
+                        new AdditionalCertificateInformation() { MacNotarizationAppName = "dotnet", MacSigningOperation = "MacDeveloperHarden" }
+                    }
+                }
+            };
+
+            // Overriding information
+            var fileSignInfo = new Dictionary<ExplicitSignInfoKey, FileSignInfoEntry>()
+            {
+                { new ExplicitSignInfoKey("test.pkg"), new FileSignInfoEntry("MacDeveloperHardenWithNotarization") }
+            };
+
+            var configuration = new Configuration(_tmpDir,
+                itemsToSign,
+                strongNameSignInfo,
+                fileSignInfo,
+                s_fileExtensionSignInfo,
+                additionalCertificateInfo,
+                itemsToSkip3rdPartyCheck: null,
+                pkgToolPath: null,
+                snPath: null,
+                new TaskLoggingHelper(new FakeBuildEngine(_output), "SignToolTests"),
+                telemetry: null);
+
+            var parsedSigningInput = configuration.GenerateListOfFiles();
+
+            // Create a fake build engine to track build calls
+            var fakeBuildEngine = new FakeBuildEngineWithFailures(_output, failNotarizationCount: 3);
+            var fakeLog = new TaskLoggingHelper(fakeBuildEngine, "SignToolTests");
+
+            var args = new SignToolArgs(
+                tempPath: _tmpDir,
+                microBuildCorePath: CreateTestResource("MicroBuild.Core"),
+                testSign: true,
+                dotnetPath: null,
+                msbuildVerbosity: "quiet",
+                logDir: _tmpDir,
+                enclosingDir: "",
+                snBinaryPath: null,
+                wix3ToolsPath: null,
+                wixToolsPath: null,
+                pkgToolPath: null,
+                dotnetTimeout: -1);
+
+            var signTool = new FakeSignTool(args, fakeLog);
+
+            var util = new BatchSignUtil(
+                fakeBuildEngine,
+                fakeLog,
+                signTool,
+                parsedSigningInput,
+                Array.Empty<string>(),
+                null);
+
+            util.Go(false);
+
+            // Verify that notarization was retried
+            fakeBuildEngine.NotarizationAttempts.Should().Be(4, "Notarization should succeed on the 4th attempt after 3 failures");
+        }
+    }
+
+    /// <summary>
+    /// Fake build engine that can simulate notarization failures
+    /// </summary>
+    internal class FakeBuildEngineWithFailures : IBuildEngine
+    {
+        private readonly int _failNotarizationCount;
+        private int _notarizationAttemptsSoFar = 0;
+        private readonly FakeBuildEngine _innerEngine;
+
+        public int NotarizationAttempts => _notarizationAttemptsSoFar;
+
+        public FakeBuildEngineWithFailures(ITestOutputHelper output, int failNotarizationCount)
+        {
+            _failNotarizationCount = failNotarizationCount;
+            _innerEngine = new FakeBuildEngine(output);
+        }
+
+        public bool BuildProjectFile(string projectFileName, string[] targetNames, System.Collections.IDictionary globalProperties, System.Collections.IDictionary targetOutputs)
+        {
+            // Check if this is a notarization project
+            if (projectFileName.Contains("Notarize"))
+            {
+                _notarizationAttemptsSoFar++;
+                
+                // Fail the first N attempts
+                if (_notarizationAttemptsSoFar <= _failNotarizationCount)
+                {
+                    return false;
+                }
+            }
+
+            // Otherwise use the inner engine implementation
+            return _innerEngine.BuildProjectFile(projectFileName, targetNames, globalProperties, targetOutputs);
+        }
+
+        public int ColumnNumberOfTaskNode => _innerEngine.ColumnNumberOfTaskNode;
+        public bool ContinueOnError { get => _innerEngine.ContinueOnError; set => _innerEngine.ContinueOnError = value; }
+        public int LineNumberOfTaskNode => _innerEngine.LineNumberOfTaskNode;
+        public string ProjectFileOfTaskNode => _innerEngine.ProjectFileOfTaskNode;
+
+        public void LogCustomEvent(CustomBuildEventArgs e) => _innerEngine.LogCustomEvent(e);
+        public void LogErrorEvent(BuildErrorEventArgs e) => _innerEngine.LogErrorEvent(e);
+        public void LogMessageEvent(BuildMessageEventArgs e) => _innerEngine.LogMessageEvent(e);
+        public void LogWarningEvent(BuildWarningEventArgs e) => _innerEngine.LogWarningEvent(e);
     }
 }

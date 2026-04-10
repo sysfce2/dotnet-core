@@ -15,9 +15,10 @@ namespace Microsoft.EntityFrameworkCore;
 public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBase(fixture), IClassFixture<NonSharedFixture>
 {
     [ConditionalTheory, InlineData(false), InlineData(true)]
+    [CosmosCondition(CosmosCondition.IsNotLinuxEmulator)]
     public async Task Can_add_update_delete_end_to_end(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<DbContext>(
+        var contextFactory = await InitializeNonSharedTest<DbContext>(
             b => b.Entity<Customer>(),
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
@@ -113,7 +114,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_add_update_delete_detached_entity_end_to_end(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<DbContext>(
+        var contextFactory = await InitializeNonSharedTest<DbContext>(
             b => b.Entity<Customer>(),
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
@@ -180,7 +181,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_add_update_untracked_properties(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<DbContext>(
+        var contextFactory = await InitializeNonSharedTest<DbContext>(
             b => b.Entity<Customer>(),
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
@@ -266,7 +267,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_add_update_delete_end_to_end_with_Guid(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<DbContext>(
+        var contextFactory = await InitializeNonSharedTest<DbContext>(
             b => b.Entity<CustomerGuid>(b =>
             {
                 b.Property(c => c.Id).ToJsonProperty("id");
@@ -322,7 +323,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_add_update_delete_end_to_end_with_DateTime(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<DbContext>(
+        var contextFactory = await InitializeNonSharedTest<DbContext>(
             b => b.Entity<CustomerDateTime>(b =>
             {
                 b.Property(c => c.Id);
@@ -419,7 +420,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_add_update_delete_with_dateTime_string_end_to_end(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<DbContext>(
+        var contextFactory = await InitializeNonSharedTest<DbContext>(
             b => b.Entity<Customer>(),
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
@@ -471,7 +472,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Entities_with_null_PK_can_be_added_with_normal_use_of_DbContext_methods_and_have_id_shadow_value_and_PK_created(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<IdentifierShadowValuePresenceTestContext>(
+        var contextFactory = await InitializeNonSharedTest<IdentifierShadowValuePresenceTestContext>(
             usePooling: false,
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
@@ -495,7 +496,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Entities_can_be_tracked_with_normal_use_of_DbContext_methods_and_have_correct_resultant_state_and_id_shadow_value(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<IdentifierShadowValuePresenceTestContext>(
+        var contextFactory = await InitializeNonSharedTest<IdentifierShadowValuePresenceTestContext>(
             usePooling: false,
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
@@ -770,7 +771,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
         Action<ModelBuilder> onModelBuilder = null)
         where TCollection : class
     {
-        var contextFactory = await InitializeAsync<CollectionCustomerContext<TCollection>>(
+        var contextFactory = await InitializeNonSharedTest<CollectionCustomerContext<TCollection>>(
             shouldLogCategory: _ => true,
             onModelCreating: onModelBuilder,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
@@ -842,7 +843,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalFact]
     public async Task Can_read_with_find_with_resource_id()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextWithResourceId>(shouldLogCategory: _ => true);
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextWithResourceId>(shouldLogCategory: _ => true);
 
         const int pk1 = 1;
         const int pk2 = 2;
@@ -906,7 +907,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Find_with_empty_resource_id_throws(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextWithResourceId>(shouldLogCategory: _ => true);
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextWithResourceId>(shouldLogCategory: _ => true);
 
         using (var context = CreateContext(contextFactory, transactionalBatch))
         {
@@ -921,7 +922,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalFact]
     public async Task Can_read_with_find_with_partition_key_and_value_generator()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextCustomValueGenerator>(
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextCustomValueGenerator>(
             shouldLogCategory: _ => true,
             addServices: s => s.AddSingleton<IJsonIdDefinitionFactory, CustomJsonIdDefinitionFactory>());
 
@@ -986,7 +987,7 @@ public class EndToEndCosmosTest(NonSharedFixture fixture) : NonSharedModelTestBa
     [ConditionalFact]
     public async Task Can_read_with_find_with_partition_key_without_value_generator()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextNoValueGenerator>(shouldLogCategory: _ => true);
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextNoValueGenerator>(shouldLogCategory: _ => true);
 
         const int pk1 = 1;
 
@@ -1046,7 +1047,7 @@ ReadItem([1.0,"One",true], 42)
     [ConditionalFact]
     public async Task Can_read_with_find_with_partition_key_not_part_of_primary_key()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextNonPrimaryKey>(
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextNonPrimaryKey>(
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
 
@@ -1081,7 +1082,7 @@ ReadItem([1.0,"One",true], 42)
     [ConditionalFact]
     public async Task Can_read_with_find_without_partition_key()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextEntityWithNoPartitionKey>(
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextEntityWithNoPartitionKey>(
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
 
@@ -1107,7 +1108,7 @@ ReadItem([1.0,"One",true], 42)
     [ConditionalFact]
     public async Task Can_read_with_find_with_PK_partition_key()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextPrimaryKey>(shouldLogCategory: _ => true);
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextPrimaryKey>(shouldLogCategory: _ => true);
 
         var customer = new CustomerGuid { Id = Guid.NewGuid(), Name = "Theon" };
 
@@ -1131,7 +1132,7 @@ ReadItem([1.0,"One",true], 42)
     [ConditionalFact]
     public async Task Can_read_with_find_with_PK_resource_id()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextWithPrimaryKeyResourceId>(shouldLogCategory: _ => true);
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextWithPrimaryKeyResourceId>(shouldLogCategory: _ => true);
 
         var customer = new CustomerWithResourceId { id = "42", Name = "Theon" };
 
@@ -1281,7 +1282,7 @@ OFFSET 0 LIMIT 1
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_use_detached_entities_without_discriminators(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<NoDiscriminatorCustomerContext>(
+        var contextFactory = await InitializeNonSharedTest<NoDiscriminatorCustomerContext>(
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
 
@@ -1330,7 +1331,7 @@ OFFSET 0 LIMIT 1
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_update_unmapped_properties(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<ExtraCustomerContext>(
+        var contextFactory = await InitializeNonSharedTest<ExtraCustomerContext>(
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
 
@@ -1389,7 +1390,7 @@ OFFSET 0 LIMIT 1
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_use_non_persisted_properties(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<UnmappedCustomerContext>(
+        var contextFactory = await InitializeNonSharedTest<UnmappedCustomerContext>(
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
 
@@ -1495,7 +1496,7 @@ OFFSET 0 LIMIT 1
     [ConditionalFact]
     public async Task Using_a_conflicting_incompatible_id_throws()
     {
-        var contextFactory = await InitializeAsync<PartitionKeyContextPrimaryKey>(shouldLogCategory: _ => true);
+        var contextFactory = await InitializeNonSharedTest<PartitionKeyContextPrimaryKey>(shouldLogCategory: _ => true);
 
         using var context = CreateContext(contextFactory, false);
 
@@ -1523,7 +1524,7 @@ OFFSET 0 LIMIT 1
     [ConditionalTheory, InlineData(false), InlineData(true)]
     public async Task Can_add_update_delete_end_to_end_with_conflicting_id(bool transactionalBatch)
     {
-        var contextFactory = await InitializeAsync<ConflictingIdContext>(
+        var contextFactory = await InitializeNonSharedTest<ConflictingIdContext>(
             shouldLogCategory: _ => true,
             onConfiguring: o => o.ConfigureWarnings(w => w.Log(CosmosEventId.NoPartitionKeyDefined)));
 
@@ -1589,7 +1590,7 @@ OFFSET 0 LIMIT 1
     [ConditionalTheory, InlineData(true), InlineData(false)]
     public async Task Can_have_non_string_property_named_Discriminator(bool useDiscriminator)
     {
-        var contextFactory = await InitializeAsync<DbContext>(
+        var contextFactory = await InitializeNonSharedTest<DbContext>(
             shouldLogCategory: _ => true,
             onModelCreating: b =>
             {
@@ -1674,7 +1675,7 @@ OFFSET 0 LIMIT 1
     protected virtual TContext CreateContext<TContext>(ContextFactory<TContext> factory, bool transactionalBatch)
         where TContext : DbContext
     {
-        var context = factory.CreateContext();
+        var context = factory.CreateDbContext();
         if (transactionalBatch)
         {
             context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Always;
@@ -1702,10 +1703,10 @@ OFFSET 0 LIMIT 1
 
     protected ListLoggerFactory LoggerFactory { get; }
 
-    protected override string StoreName
+    protected override string NonSharedStoreName
         => nameof(EndToEndCosmosTest);
 
-    protected override ITestStoreFactory TestStoreFactory
+    protected override ITestStoreFactory NonSharedTestStoreFactory
         => CosmosTestStoreFactory.Instance;
 
     protected ContextFactory<DbContext> ContextFactory { get; private set; }
@@ -1715,7 +1716,7 @@ OFFSET 0 LIMIT 1
         Func<DbContextOptionsBuilder, Task> onConfiguring = null,
         Func<DbContext, Task> seed = null,
         bool sensitiveLogEnabled = true)
-        => ContextFactory = await InitializeAsync(
+        => ContextFactory = await InitializeNonSharedTest(
             onModelCreating,
             seed: seed,
             shouldLogCategory: _ => true,

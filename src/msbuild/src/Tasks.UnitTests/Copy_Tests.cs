@@ -21,6 +21,7 @@ using Shouldly;
 
 using Xunit;
 using Xunit.Abstractions;
+using Microsoft.Build.UnitTests.Shared;
 
 #nullable disable
 
@@ -2507,8 +2508,8 @@ namespace Microsoft.Build.UnitTests
             // Copy calls to different destinations can come in any order when running in parallel.
             // Use .OriginalValue to compare against the original input path (before Path.GetFullPath resolution).
             // TaskItem normalizes paths via FileUtilities.FixFilePath, so we need to do the same for comparison.
-            Assert.Contains(copyFunctor.FilesCopiedSuccessfully, f => f.Path.OriginalValue == FrameworkFileUtilities.FixFilePath("c:\\source"));
-            Assert.Contains(copyFunctor.FilesCopiedSuccessfully, f => f.Path.OriginalValue == FrameworkFileUtilities.FixFilePath("c:\\source2"));
+            Assert.Contains(copyFunctor.FilesCopiedSuccessfully, f => f.Path.OriginalValue == FileUtilities.FixFilePath("c:\\source"));
+            Assert.Contains(copyFunctor.FilesCopiedSuccessfully, f => f.Path.OriginalValue == FileUtilities.FixFilePath("c:\\source2"));
         }
 
         /// <summary>
@@ -3161,7 +3162,7 @@ namespace Microsoft.Build.UnitTests
         public void CopyToFileWithSameCaseInsensitiveNameAsExistingDirectoryOnUnix()
         {
             // Skip this test on case-insensitive file systems (Windows, macOS with default APFS/HFS+)
-            if (!FileUtilities.GetIsFileSystemCaseSensitive())
+            if (!FileUtilities.IsFileSystemCaseSensitive)
             {
                 return;
             }
@@ -3174,7 +3175,7 @@ namespace Microsoft.Build.UnitTests
                 Directory.CreateDirectory(tempDir);
 
                 // Create a subdirectory structure to match the real scenario
-                string outputDir = Path.Combine(tempDir, "bin", "Debug", "net10.0");
+                string outputDir = Path.Combine(tempDir, "bin", "Debug", RunnerUtilities.LatestDotNetCoreForMSBuild);
                 Directory.CreateDirectory(outputDir);
 
                 // Create a directory named "cs" (lowercase) in the output directory
@@ -3182,7 +3183,7 @@ namespace Microsoft.Build.UnitTests
                 Directory.CreateDirectory(lowercaseDir);
 
                 // Create a few source files to copy (representing multiple files being copied to same dest dir)
-                string sourceDir = Path.Combine(tempDir, "CS", "obj", "Debug", "net10.0");
+                string sourceDir = Path.Combine(tempDir, "CS", "obj", "Debug", RunnerUtilities.LatestDotNetCoreForMSBuild);
                 Directory.CreateDirectory(sourceDir);
                 
                 string sourceFile1 = Path.Combine(sourceDir, "apphost");

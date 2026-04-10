@@ -28,7 +28,7 @@ extends:
   template: azure-pipelines/MicroBuild.1ES.Unofficial.yml@MicroBuildTemplate
   parameters:
     sdl:
-      sourceAnalysisPool: VSEngSS-MicroBuild2022-1ES
+      sourceAnalysisPool: VSEng-MicroBuildVSStable
       binskim:
         enabled: true
         scanOutputDirectoryOnly: true
@@ -36,8 +36,6 @@ extends:
         enabled: true
       credscan:
         enabled: false
-      suppression:
-        suppressionFile: $(Build.SourcesDirectory)\.gdn\.gdnsuppress
     pool:
       name: AzurePipelines-EO
       image: 1ESPT-Windows2022

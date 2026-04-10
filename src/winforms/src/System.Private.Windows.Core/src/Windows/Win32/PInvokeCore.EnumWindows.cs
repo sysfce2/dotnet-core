@@ -1,14 +1,18 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
 namespace Windows.Win32;
 
-internal static partial class PInvokeCore
+internal static unsafe partial class PInvokeCore
 {
     public delegate BOOL EnumWindowsCallback(HWND hWnd);
+
+#if NETFRAMEWORK
+    private delegate BOOL EnumWindowsNativeCallback(HWND hWnd, LPARAM lParam);
+    private static readonly EnumWindowsNativeCallback s_enumWindowsNativeCallback = HandleEnumWindowsNativeCallback;
+    private static readonly delegate* unmanaged[Stdcall]<HWND, LPARAM, BOOL> s_enumWindowsNativeCallbackFunctionPointer =
+        (delegate* unmanaged[Stdcall]<HWND, LPARAM, BOOL>)Marshal.GetFunctionPointerForDelegate(s_enumWindowsNativeCallback);
+#endif
 
     public static unsafe BOOL EnumWindows(EnumWindowsCallback callback)
     {
@@ -18,7 +22,11 @@ internal static partial class PInvokeCore
         GCHandle gcHandle = GCHandle.Alloc(callback);
         try
         {
-            return EnumWindows(&EnumWindowsNativeCallback, (LPARAM)(nint)gcHandle);
+#if NET
+            return EnumWindows(&HandleEnumWindowsNativeCallback, (LPARAM)(nint)gcHandle);
+#else
+            return EnumWindows(s_enumWindowsNativeCallbackFunctionPointer, (LPARAM)(nint)gcHandle);
+#endif
         }
         finally
         {
@@ -26,8 +34,10 @@ internal static partial class PInvokeCore
         }
     }
 
+#if NET
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static BOOL EnumWindowsNativeCallback(HWND hWnd, LPARAM lParam)
+#endif
+    private static BOOL HandleEnumWindowsNativeCallback(HWND hWnd, LPARAM lParam)
     {
         return ((EnumWindowsCallback)((GCHandle)(nint)lParam).Target!)(hWnd);
     }

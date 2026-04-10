@@ -54,7 +54,7 @@ stages:
         displayName: Code check
         pool:
           name: $(DncEngPublicBuildPool)
-          demands: ImageOverride -equals windows.vs2022preview.amd64.open
+          demands: ImageOverride -equals windows.vs2022.amd64.open
         steps:
         - task: NuGetCommand@2
           displayName: 'Clear NuGet caches'
@@ -81,7 +81,7 @@ stages:
         timeoutInMinutes: 120
         pool:
           name: $(DncEngPublicBuildPool)
-          demands: ImageOverride -equals windows.vs2022preview.amd64.open
+          demands: ImageOverride -equals windows.vs2022.amd64.open
         strategy:
           matrix:
             debug:
@@ -237,7 +237,7 @@ stages:
 
       - job: Linux
         container:
-          image: mcr.microsoft.com/dotnet-buildtools/prereqs:cbl-mariner-2.0
+          image: mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-build-amd64
           options: --init # This ensures all the stray defunct processes are reaped.
         pool:
           name: NetCore-Public

@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.ServiceHub.Framework;
@@ -90,7 +91,6 @@ namespace NuGetVSExtension
                     // Requests from this session will be visible in the Chat window
                     CopilotRequest request = new(Resources.Prompt_FixNuGetPackageVulnerabilities)
                     {
-                        Intent = CopilotIntent.None,
                         Guidance = "Use absolute paths when invoking MCP Tools.",
                         DirectedResponders = [new(AgentModeResponderServiceMoniker, new(CopilotDescriptors.CurrentResponderVersion))]
                     };
@@ -99,6 +99,13 @@ namespace NuGetVSExtension
                     string solutionPathContext = $"The current solution file path is: {GetSolutionPath()}.";
                     CopilotContext context = new CopilotContext(ProviderDescriptor.Moniker, ContextDescriptor, request.CorrelationId, solutionPathContext);
                     IReadOnlyList<CopilotFunctionDescriptor> functions = await cfp.GetFunctionsAsync(request.CorrelationId, cancellationToken);
+                    if (functions is null || !functions.Any(f => string.Equals(f.Name, McpServerConstants.NuGetSolverFullyQualifiedToolName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        SendTelemetryEvent(FixVulnerabilitiesWithCopilotErrorType.NuGetSolverNotAvailable);
+                        ShowWarningMessage(Resources.Error_NuGetSolverNotAvailable);
+                        return;
+                    }
+
                     CopilotRequest requestWithFunctionsAndContext = request.WithFunctions(functions).WithContext(context);
 
                     try
