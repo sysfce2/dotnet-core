@@ -224,13 +224,7 @@ namespace Microsoft.TemplateEngine
                 ?? throw new InvalidOperationException($"Failed to parse JSON from '{path}'.");
         }
 
-<<<<<<< ours
-        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Newtonsoft.Json is not used in AOT scenarios in this context.")]
-        [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Newtonsoft.Json is not used in trimmed scenarios in this context.")]
-        internal static void WriteObject(this IPhysicalFileSystem fileSystem, string path, object obj)
-=======
         internal static void WriteObject(this IPhysicalFileSystem fileSystem, string path, JsonNode obj)
->>>>>>> theirs
         {
             using Stream fileStream = fileSystem.CreateFile(path);
             using var writer = new Utf8JsonWriter(fileStream);
