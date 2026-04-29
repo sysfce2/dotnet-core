@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 #endif
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.TemplateEngine.Abstractions.PhysicalFileSystem;
 using System.Text.Json;
 using System.Text.Json.Nodes;
